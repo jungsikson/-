@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>더트라이브 작업 보고</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0f0f0f;--sur:#1a1a1a;--sur2:#242424;--sur3:#2e2e2e;--bd:#333;--bd2:#404040;--tx:#f0f0f0;--tx2:#999;--tx3:#666;--acc:#E8593C;--acc2:#ff7a5c;--blue:#4A9EFF;--green:#43A047;--r:10px;--rs:6px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--tx);font-family:'Noto Sans KR',sans-serif;font-size:14px;min-height:100vh;padding-bottom:60px}
+.hdr{background:var(--sur);border-bottom:1px solid var(--bd);padding:16px 20px;position:sticky;top:0;z-index:100;display:flex;align-items:center;gap:12px}
+.logo{width:32px;height:32px;background:var(--acc);border-radius:8px;display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:14px;color:#fff}
+.hdr-t{font-weight:700;font-size:15px}
+.hdr-d{font-size:12px;color:var(--tx2);margin-left:auto}
+.wrap{max-width:680px;margin:0 auto;padding:24px 16px}
+.sec{background:var(--sur);border:1px solid var(--bd);border-radius:var(--r);padding:20px;margin-bottom:16px}
+.stl{font-size:11px;font-weight:700;color:var(--tx2);letter-spacing:.1em;text-transform:uppercase;margin-bottom:14px}
+label{display:block;font-size:12px;color:var(--tx2);margin-bottom:5px;font-weight:500}
+input[type=text],input[type=date],select,textarea{width:100%;background:var(--sur2);border:1px solid var(--bd);border-radius:var(--rs);color:var(--tx);font-family:'Noto Sans KR',sans-serif;font-size:14px;padding:10px 12px;outline:none;transition:border-color .15s;-webkit-appearance:none}
+input:focus,select:focus,textarea:focus{border-color:var(--acc)}
+input::placeholder,textarea::placeholder{color:var(--tx3)}
+select option{background:var(--sur2)}
+.r2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.cog{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cob{background:var(--sur2);border:1.5px solid var(--bd);border-radius:var(--rs);color:var(--tx2);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:500;padding:11px 10px;text-align:center;transition:all .15s}
+.cob:hover{border-color:var(--bd2);color:var(--tx)}
+.cob[data-c="인천테슬라"].on{background:#1565C0;border-color:#1565C0;color:#fff}
+.cob[data-c="한남테슬라"].on{background:#4527A0;border-color:#4527A0;color:#fff}
+.cob[data-c="마이바흐"].on{background:#2E7D32;border-color:#2E7D32;color:#fff}
+.cob[data-c="벤틀리"].on{background:#B45309;border-color:#B45309;color:#fff}
+.cob[data-c="헤이딜러"].on{background:#0E6674;border-color:#0E6674;color:#fff}
+.cl{display:flex;flex-direction:column;gap:10px}
+.cc{background:var(--sur2);border:1px solid var(--bd);border-radius:var(--rs);overflow:hidden;animation:si .18s ease}
+.chd{display:flex;align-items:center;padding:10px 14px;gap:10px;cursor:pointer;user-select:none}
+.cc.op .chd{border-bottom:1px solid var(--bd)}
+.bdg{background:var(--sur3);border-radius:4px;font-size:11px;font-weight:700;color:var(--tx2);padding:2px 7px;min-width:28px;text-align:center}
+.pp{font-size:13px;font-weight:500;flex:1;color:var(--tx)}
+.pp.em{color:var(--tx3);font-weight:400}
+.db{background:none;border:none;cursor:pointer;color:var(--tx3);font-size:18px;line-height:1;padding:2px 6px;border-radius:4px;transition:color .1s,background .1s}
+.db:hover{color:var(--acc);background:rgba(232,89,60,.1)}
+.cb{padding:14px;display:none}
+.cc.op .cb{display:block}
+.ckg{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.cki{display:flex;align-items:center;gap:4px;background:var(--sur3);border:1px solid var(--bd);border-radius:4px;cursor:pointer;font-size:12px;padding:4px 8px;transition:all .12s;user-select:none}
+.cki input{display:none}
+.cki.on{background:rgba(232,89,60,.15);border-color:var(--acc);color:var(--acc2)}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--tx3);flex-shrink:0}
+.cki.on .dot{background:var(--acc)}
+.pr{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.tw{position:relative;width:38px;height:22px}
+.tw input{opacity:0;width:0;height:0;position:absolute}
+.ts{position:absolute;inset:0;background:var(--sur3);border:1px solid var(--bd);border-radius:11px;cursor:pointer;transition:background .15s,border-color .15s}
+.ts::after{content:'';position:absolute;top:3px;left:3px;width:14px;height:14px;background:var(--tx2);border-radius:50%;transition:transform .15s,background .15s}
+.tw input:checked~.ts{background:var(--acc);border-color:var(--acc)}
+.tw input:checked~.ts::after{transform:translateX(16px);background:#fff}
+.pl{font-size:13px;color:var(--tx2);font-weight:500}
+.pd{display:none}
+.pd.show{display:block}
+.note-row{margin-top:12px}
+.note-row textarea{min-height:44px;resize:none;font-size:13px}
+.ab{width:100%;background:none;border:1.5px dashed var(--bd2);border-radius:var(--rs);color:var(--tx3);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;padding:12px;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:6px}
+.ab:hover{border-color:var(--acc);color:var(--acc);background:rgba(232,89,60,.05)}
+.ct{font-size:12px;color:var(--tx3);text-align:right;margin-bottom:8px}
+.ct span{color:var(--acc);font-weight:700}
+.sb{width:100%;background:var(--acc);border:none;border-radius:var(--r);color:#fff;cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:15px;font-weight:700;padding:16px;transition:background .15s,transform .1s}
+.sb:hover{background:var(--acc2)}
+.sb:active{transform:scale(.99)}
+.sb:disabled{background:var(--sur3);color:var(--tx3);cursor:not-allowed;transform:none}
+.pvb{background:var(--sur2);border:1px solid var(--bd);border-radius:var(--rs);padding:14px;font-size:12px;line-height:1.8;color:var(--tx2);white-space:pre-wrap;font-family:'Space Grotesk',monospace;display:none;margin-top:12px}
+.pvb.show{display:block}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--sur);border:1px solid var(--bd2);border-radius:100px;padding:10px 20px;font-size:13px;font-weight:500;box-shadow:0 4px 24px rgba(0,0,0,.4);transition:transform .3s cubic-bezier(.34,1.56,.64,1);z-index:999;white-space:nowrap}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.toast.ok{color:var(--green);border-color:var(--green)}
+.toast.err{color:var(--acc);border-color:var(--acc)}
+@keyframes si{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div class="logo">T</div>
+  <div class="hdr-t">더트라이브 작업 보고</div>
+  <div class="hdr-d" id="hd"></div>
+</div>
+<div class="wrap">
+  <div class="sec">
+    <div class="stl">기본 정보</div>
+    <div class="r2" style="margin-bottom:12px">
+      <div><label>작업 날짜</label><input type="date" id="wd"></div>
+      <div><label>디테일러 이름</label><input type="text" id="det" placeholder="이름 직접 입력" autocomplete="off"></div>
+    </div>
+    <div><label>업체</label>
+    <div class="cog">
+      <button class="cob" data-c="인천테슬라" onclick="sco('인천테슬라')">인천 테슬라</button>
+      <button class="cob" data-c="한남테슬라" onclick="sco('한남테슬라')">한남 테슬라</button>
+      <button class="cob" data-c="마이바흐"   onclick="sco('마이바흐')">마이바흐</button>
+      <button class="cob" data-c="벤틀리"     onclick="sco('벤틀리')">벤틀리</button>
+      <button class="cob" data-c="헤이딜러"   onclick="sco('헤이딜러')">헤이딜러</button>
+    </div></div>
+  </div>
+  <div class="sec" id="cs" style="display:none">
+    <div class="stl">작업 차량</div>
+    <div class="ct">총 <span id="cn">0</span>대</div>
+    <div class="cl" id="cl"></div>
+    <button class="ab" onclick="ac()" style="margin-top:10px"><span style="font-size:18px;line-height:1">+</span> 차량 추가</button>
+  </div>
+  <div id="sa" style="display:none">
+    <button class="sb" onclick="sub()">작업 보고 제출</button>
+    <div class="pvb" id="pv"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const SHEET_URL='https://script.google.com/macros/s/AKfycbx-zVXVpCcv_ZrDKD7IK10raG-YLOdnuFdMdDHJK0EtafpO8jpQ3v5bIpPfD4T5Yq9MDw/exec';
+const CO={
+  '인천테슬라':{t:'tesla',   m:['모델3','모델Y','모델X','모델S']},
+  '한남테슬라':{t:'tesla',   m:['모델3','모델Y','모델X','모델S']},
+  '마이바흐':  {t:'luxury',  m:['세단','SUV']},
+  '벤틀리':    {t:'luxury',  m:['세단','SUV']},
+  '헤이딜러':  {t:'heydealer',m:[]},
+};
+const PARTS=['보닛','앞범퍼','뒷범퍼','운전석앞휀다','조수석앞휀다','운전석뒤휀다','조수석뒤휀다','운전석앞도어','조수석앞도어','운전석뒤도어','조수석뒤도어','트렁크','루프'];
+const SVCS=['외부만','내부만','내외부'];
+let SC='',CI=0;
+(()=>{
+  const t=new Date(),mm=String(t.getMonth()+1).padStart(2,'0'),dd=String(t.getDate()).padStart(2,'0');
+  document.getElementById('wd').value=`${t.getFullYear()}-${mm}-${dd}`;
+  document.getElementById('hd').textContent=`${mm}/${dd}(${'일월화수목금토'[t.getDay()]})`;
+})();
+function sco(co){
+  SC=co;
+  document.querySelectorAll('.cob').forEach(b=>b.classList.toggle('on',b.dataset.c===co));
+  document.getElementById('cl').innerHTML='';CI=0;uc();
+  ['cs','sa'].forEach(id=>document.getElementById(id).style.display='block');
+  document.getElementById('pv').classList.remove('show');
+  ac();
+}
+function ac(){
+  const i=++CI,iT=CO[SC].t==='tesla',isHD=CO[SC].t==='heydealer';
+  const mo=CO[SC].m.map(m=>`<option>${m}</option>`).join('');
+  const noteHTML=`<div class="note-row"><label>특이사항 (선택)</label><textarea id="nt${i}" placeholder="예) 정산 제외, 클레임 등" rows="2"></textarea></div>`;
+  const modelSel=isHD?'<div></div>':`<div><label>차종</label><select id="mo${i}">${mo}</select></div>`;
+  const sh=isHD ? noteHTML
+    : iT ? `<div class="pr"><label class="tw"><input type="checkbox" onchange="tp(this,${i})"><span class="ts"></span></label><span class="pl">광택 작업 있음</span></div>
+      <div class="pd" id="pd${i}">
+        <label style="margin-bottom:6px">광택 작업 부위</label>
+        <div class="ckg">${PARTS.map(p=>`<label class="cki" onclick="tpt(this)"><input type="checkbox" value="${p}"><span class="dot"></span>${p}</label>`).join('')}</div>
+        <div style="margin-top:12px"><label>광택 판수</label><input type="text" id="pn${i}" placeholder="숫자" style="max-width:120px" inputmode="numeric"></div>
+      </div>${noteHTML}`
+    : `<div><label>서비스</label><select id="sv${i}"><option value="">선택</option>${SVCS.map(s=>`<option>${s}</option>`).join('')}</select></div>${noteHTML}`;
+  document.getElementById('cl').insertAdjacentHTML('beforeend',
+    `<div class="cc op" id="cc${i}">
+      <div class="chd" onclick="tc(${i})">
+        <span class="bdg">${i}</span>
+        <span class="pp em" id="pp${i}">차량번호 입력 전</span>
+        <button class="db" onclick="dc(event,${i})">×</button>
+      </div>
+      <div class="cb">
+        <div class="r2" style="margin-bottom:12px">
+          <div><label>차량번호</label><input type="text" id="pl${i}" placeholder="예) 03소7917" oninput="this.value=this.value.replace(/\\s/g,'');up(${i})" onkeydown="if(event.key===' ')event.preventDefault()" autocomplete="off"></div>
+          ${modelSel}
+        </div>
+        ${sh}
+      </div>
+    </div>`);
+  uc();setTimeout(()=>document.getElementById(`pl${i}`)?.focus(),50);
+}
+function tc(i){document.getElementById(`cc${i}`).classList.toggle('op');}
+function up(i){const v=document.getElementById(`pl${i}`).value.trim(),el=document.getElementById(`pp${i}`);el.textContent=v||'차량번호 입력 전';el.classList.toggle('em',!v);}
+function dc(e,i){e.stopPropagation();const el=document.getElementById(`cc${i}`);el.style.cssText+='opacity:0;transform:translateY(-6px);transition:all .15s';setTimeout(()=>{el.remove();uc();},150);}
+function uc(){document.getElementById('cn').textContent=document.querySelectorAll('.cc').length;}
+function tp(cb,i){document.getElementById(`pd${i}`).classList.toggle('show',cb.checked);}
+function tpt(l){const c=l.querySelector('input');c.checked=!c.checked;l.classList.toggle('on',c.checked);}
+function col(){
+  const date=document.getElementById('wd').value,det=document.getElementById('det').value.trim(),co=SC;
+  const iT=CO[co]?.t==='tesla',isHD=CO[co]?.t==='heydealer',cars=[];
+  document.querySelectorAll('.cc').forEach(card=>{
+    const id=card.id.replace('cc','');
+    const plate=document.getElementById(`pl${id}`)?.value.trim();
+    const model=document.getElementById(`mo${id}`)?.value||'';
+    const note=document.getElementById(`nt${id}`)?.value.trim()||'';
+    if(!plate)return;
+    if(isHD){
+      cars.push({plate,model:'',service:'상품화',note});
+    } else if(iT){
+      const hp=card.querySelector('.tw input')?.checked||false;
+      const parts=hp?[...card.querySelectorAll('.cki.on input')].map(x=>x.value).join(','):'';
+      const panels=hp?(parseInt(document.getElementById(`pn${id}`)?.value)||0):0;
+      cars.push({plate,model,hasPolish:hp,parts,panels,note});
+    } else {
+      cars.push({plate,model,service:document.getElementById(`sv${id}`)?.value||'',note});
+    }
+  });
+  return{date,detailer:det,company:co,cars};
+}
+function bpv(d){
+  const day='일월화수목금토'[new Date(d.date).getDay()];
+  const isHD=CO[d.company]?.t==='heydealer',iT=CO[d.company]?.t==='tesla';
+  let t=`[${d.date.replace(/-/g,'/')}(${day}) 일일 작업 보고]\n■ 디테일러: ${d.detailer}  업체: ${d.company}\n■ 금일 작업대수: ${d.cars.length}대\n\n`;
+  if(isHD){
+    t+=`상품화\n`;
+    d.cars.forEach(c=>t+=`  - ${c.plate}${c.note?' *'+c.note:''}\n`);
+  } else {
+    t+=`1. 세차\n`;
+    d.cars.forEach(c=>t+=`  - ${c.plate}${c.model?' ('+c.model+')':''}${c.note?' *'+c.note:''}\n`);
+    if(iT){const pc=d.cars.filter(c=>c.panels>0);if(pc.length){t+=`\n2. 광택내역\n`;pc.forEach(c=>t+=`  - ${c.plate}: ${c.parts} / ${c.panels}판\n`);}}
+  }
+  return t;
+}
+async function sub(){
+  const d=col();
+  if(!d.detailer){tst('이름을 입력해주세요','err');return;}
+  if(!d.company){tst('업체를 선택해주세요','err');return;}
+  if(!d.cars.length){tst('차량을 추가해주세요','err');return;}
+  document.getElementById('pv').textContent=bpv(d);
+  document.getElementById('pv').classList.add('show');
+  const btn=document.querySelector('.sb');btn.disabled=true;btn.textContent='전송 중...';
+  try{
+    await fetch(SHEET_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+    tst('✓ 제출 완료! 시트에 자동 적재됩니다','ok');btn.textContent='✓ 제출 완료';
+  }catch(e){
+    tst('전송 오류 — 네트워크를 확인해주세요','err');btn.disabled=false;btn.textContent='작업 보고 제출';
+  }
+}
+function tst(msg,type=''){const el=document.getElementById('toast');el.textContent=msg;el.className=`toast ${type} show`;setTimeout(()=>el.classList.remove('show'),3200);}
+</script>
+</body>
+</html>
