@@ -231,6 +231,11 @@ async function sub(){
     const missing=d.cars.find(c=>!c.service);
     if(missing){tst(`${missing.plate || '차량'} 서비스를 선택해주세요`,'err');return;}
   }
+  // 테슬라 세차OFF + 광택OFF 체크
+  if(CO[d.company]?.t==='tesla'){
+    const empty=d.cars.find(c=>!c.hasWash && !c.hasPolish);
+    if(empty){tst(`${empty.plate || '차량'} 세차 또는 광택을 선택해주세요`,'err');return;}
+  }
   document.getElementById('pv').textContent=bpv(d);
   document.getElementById('pv').classList.add('show');
   const btn=document.querySelector('.sb');btn.disabled=true;btn.textContent='전송 중...';
