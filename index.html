@@ -139,7 +139,7 @@ function ac(){
   const i=++CI,iT=CO[SC].t==='tesla',isHD=CO[SC].t==='heydealer';
   const mo=CO[SC].m.map(m=>`<option>${m}</option>`).join('');
   const noteHTML=`<div class="note-row"><label>특이사항 (선택)</label><textarea id="nt${i}" placeholder="예) 정산 제외, 클레임 등" rows="2"></textarea></div>`;
-  const modelSel=isHD?'<div></div>':`<div><label>차종</label><select id="mo${i}">${mo}</select></div>`;
+  const modelSel=isHD?`<div><label>차종</label><input type="text" id="mo${i}" placeholder="예) 스포티지, 아반떼" autocomplete="off"></div>`:`<div><label>차종</label><select id="mo${i}">${mo}</select></div>`;
   const sh=isHD ? noteHTML
     : iT ? `<div class="pr"><label class="tw"><input type="checkbox" onchange="tp(this,${i})"><span class="ts"></span></label><span class="pl">광택 작업 있음</span></div>
       <div class="pd" id="pd${i}">
