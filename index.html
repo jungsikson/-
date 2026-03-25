@@ -141,10 +141,15 @@ function ac(){
   const noteHTML=`<div class="note-row"><label>특이사항 (선택)</label><textarea id="nt${i}" placeholder="예) 정산 제외, 클레임 등" rows="2"></textarea></div>`;
   const modelSel=isHD?`<div><label>차종</label><input type="text" id="mo${i}" placeholder="예) 스포티지, 아반떼" autocomplete="off"></div>`:`<div><label>차종</label><select id="mo${i}">${mo}</select></div>`;
   const sh=isHD ? noteHTML
-    : iT ? `<div class="pr"><label class="tw"><input type="checkbox" onchange="tp(this,${i})"><span class="ts"></span></label><span class="pl">광택 작업 있음</span></div>
+    : iT ? `<div class="pr"><label class="tw"><input type="checkbox" id="ws${i}" checked onchange="tw_(this,${i})"><span class="ts"></span></label><span class="pl">세차 작업 있음</span></div>
+      <div class="pr"><label class="tw"><input type="checkbox" onchange="tp(this,${i})"><span class="ts"></span></label><span class="pl">광택 작업 있음</span></div>
       <div class="pd" id="pd${i}">
         <label style="margin-bottom:6px">광택 작업 부위</label>
         <div class="ckg">${PARTS.map(p=>`<label class="cki" onclick="tpt(this)"><input type="checkbox" value="${p}"><span class="dot"></span>${p}</label>`).join('')}</div>
+        <div style="margin-top:10px">
+          <label style="margin-bottom:4px">기타 부위 직접 입력</label>
+          <input type="text" id="pe${i}" placeholder="예) 사이드미러, 휠" autocomplete="off">
+        </div>
         <div style="margin-top:12px"><label>광택 판수</label><input type="text" id="pn${i}" placeholder="숫자" style="max-width:120px" inputmode="numeric"></div>
       </div>${noteHTML}`
     : `<div><label>서비스</label><select id="sv${i}"><option value="">선택</option>${SVCS.map(s=>`<option>${s}</option>`).join('')}</select></div>${noteHTML}`;
@@ -169,6 +174,7 @@ function tc(i){document.getElementById(`cc${i}`).classList.toggle('op');}
 function up(i){const v=document.getElementById(`pl${i}`).value.trim(),el=document.getElementById(`pp${i}`);el.textContent=v||'차량번호 입력 전';el.classList.toggle('em',!v);}
 function dc(e,i){e.stopPropagation();const el=document.getElementById(`cc${i}`);el.style.cssText+='opacity:0;transform:translateY(-6px);transition:all .15s';setTimeout(()=>{el.remove();uc();},150);}
 function uc(){document.getElementById('cn').textContent=document.querySelectorAll('.cc').length;}
+function tw_(cb,i){} // 세차 토글 — 수집 시 hasWash로 처리
 function tp(cb,i){document.getElementById(`pd${i}`).classList.toggle('show',cb.checked);}
 function tpt(l){const c=l.querySelector('input');c.checked=!c.checked;l.classList.toggle('on',c.checked);}
 function col(){
@@ -181,12 +187,18 @@ function col(){
     const note=document.getElementById(`nt${id}`)?.value.trim()||'';
     if(!plate)return;
     if(isHD){
-      cars.push({plate,model:'',service:'상품화',note});
+      cars.push({plate,model,service:'상품화',note});
     } else if(iT){
-      const hp=card.querySelector('.tw input')?.checked||false;
-      const parts=hp?[...card.querySelectorAll('.cki.on input')].map(x=>x.value).join(','):'';
+      const wsCb=document.getElementById(`ws${id}`);
+      const hasWash=wsCb?wsCb.checked:true;
+      const polishCbs=[...card.querySelectorAll('.tw input')];
+      const hp=polishCbs.length>1?polishCbs[1].checked:false;
+      const checkedParts=hp?[...card.querySelectorAll('.cki.on input')].map(x=>x.value):[];
+      const extraPart=(hp&&document.getElementById(`pe${id}`)?.value.trim())||'';
+      if(extraPart) checkedParts.push(extraPart);
+      const parts=checkedParts.join(',');
       const panels=hp?(parseInt(document.getElementById(`pn${id}`)?.value)||0):0;
-      cars.push({plate,model,hasPolish:hp,parts,panels,note});
+      cars.push({plate,model,hasWash,hasPolish:hp,parts,panels,note});
     } else {
       cars.push({plate,model,service:document.getElementById(`sv${id}`)?.value||'',note});
     }
@@ -212,6 +224,13 @@ async function sub(){
   if(!d.detailer){tst('이름을 입력해주세요','err');return;}
   if(!d.company){tst('업체를 선택해주세요','err');return;}
   if(!d.cars.length){tst('차량을 추가해주세요','err');return;}
+
+  // 마이바흐·벤틀리 서비스 미선택 체크
+  const isLuxury=CO[d.company]?.t==='luxury';
+  if(isLuxury){
+    const missing=d.cars.find(c=>!c.service);
+    if(missing){tst(`${missing.plate || '차량'} 서비스를 선택해주세요`,'err');return;}
+  }
   document.getElementById('pv').textContent=bpv(d);
   document.getElementById('pv').classList.add('show');
   const btn=document.querySelector('.sb');btn.disabled=true;btn.textContent='전송 중...';
