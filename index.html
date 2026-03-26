@@ -82,6 +82,7 @@ select option{background:var(--sur2)}
   <div class="hdr-t">더트라이브 작업 보고</div>
   <div class="hdr-d" id="hd"></div>
 </div>
+<div id="page-report">
 <div class="wrap">
   <div class="sec">
     <div class="stl">기본 정보</div>
@@ -109,7 +110,23 @@ select option{background:var(--sur2)}
     <div class="pvb" id="pv"></div>
   </div>
 </div>
+</div>
 <div class="toast" id="toast"></div>
+
+<!-- 조회 탭 -->
+<div id="page-query" style="display:none">
+  <div class="wrap">
+    <div class="sec">
+      <div class="stl">내역 조회</div>
+      <div class="r2" style="margin-bottom:12px">
+        <div><label>날짜</label><input type="date" id="q-date"></div>
+        <div><label>이름</label><input type="text" id="q-name" placeholder="이름 입력" autocomplete="off"></div>
+      </div>
+      <button class="sb" onclick="queryReport()" style="margin-top:4px">조회</button>
+    </div>
+    <div id="q-result"></div>
+  </div>
+</div>
 <script>
 const SHEET_URL='https://script.google.com/macros/s/AKfycbx-zVXVpCcv_ZrDKD7IK10raG-YLOdnuFdMdDHJK0EtafpO8jpQ3v5bIpPfD4T5Yq9MDw/exec';
 const CO={
@@ -267,6 +284,105 @@ async function sub(){
   }
 }
 function tst(msg,type=''){const el=document.getElementById('toast');el.textContent=msg;el.className=`toast ${type} show`;setTimeout(()=>el.classList.remove('show'),3200);}
+
+function switchTab(tab){
+  document.getElementById('page-report').style.display=tab==='report'?'block':'none';
+  document.getElementById('page-query').style.display=tab==='query'?'block':'none';
+  document.getElementById('tab-report').style.borderBottomColor=tab==='report'?'var(--acc)':'transparent';
+  document.getElementById('tab-report').style.color=tab==='report'?'var(--tx)':'var(--tx2)';
+  document.getElementById('tab-report').style.fontWeight=tab==='report'?'700':'500';
+  document.getElementById('tab-query').style.borderBottomColor=tab==='query'?'var(--acc)':'transparent';
+  document.getElementById('tab-query').style.color=tab==='query'?'var(--tx)':'var(--tx2)';
+  document.getElementById('tab-query').style.fontWeight=tab==='query'?'700':'500';
+  // 조회 탭 열 때 오늘 날짜 + 이름 자동 입력
+  if(tab==='query'){
+    const t=new Date(),mm=String(t.getMonth()+1).padStart(2,'0'),dd=String(t.getDate()).padStart(2,'0');
+    document.getElementById('q-date').value=`${t.getFullYear()}-${mm}-${dd}`;
+    const savedName=document.getElementById('det').value;
+    if(savedName) document.getElementById('q-name').value=savedName;
+  }
+}
+
+async function queryReport(){
+  const date=document.getElementById('q-date').value;
+  const name=document.getElementById('q-name').value.trim();
+  if(!date||!name){tst('날짜와 이름을 입력해주세요','err');return;}
+
+  const el=document.getElementById('q-result');
+  el.innerHTML='<div style="text-align:center;padding:20px;color:var(--tx2);font-size:13px">조회 중...</div>';
+
+  try{
+    const url=`${SHEET_URL}?action=query&name=${encodeURIComponent(name)}&date=${date}`;
+    const res=await fetch(url);
+    const data=await res.json();
+
+    if(data.status!=='ok'){el.innerHTML=`<div style="padding:16px;color:var(--acc);font-size:13px">오류: ${data.message}</div>`;return;}
+
+    // ── 이번 달 요약 ──
+    let html=`<div style="background:var(--sur);border:1px solid var(--bd);border-radius:var(--r);padding:16px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:var(--tx2);letter-spacing:.08em;margin-bottom:8px">${data.year}년 ${data.month}월 누적 — ${name}</div>
+      <div style="font-size:22px;font-weight:700;color:var(--acc);margin-bottom:12px">총 ${data.monthTotal}대</div>`;
+
+    Object.entries(data.monthStats).forEach(([co,stat])=>{
+      if(stat.type==='tesla'){
+        const total=stat.wash+(stat.polish||0);
+        html+=`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd);font-size:13px">
+          <span style="color:var(--tx)">${co}</span>
+          <span style="color:var(--tx2)">세차 <strong style="color:var(--tx)">${stat.wash}</strong>대 / 광택 <strong style="color:var(--tx)">${stat.polish}</strong>대 / 총 <strong style="color:var(--acc)">${total}</strong>대</span>
+        </div>`;
+      } else {
+        const total=Object.values(stat.services).reduce((a,b)=>a+b,0);
+        const svcStr=Object.entries(stat.services).map(([s,n])=>`${s} ${n}대`).join(' / ');
+        html+=`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd);font-size:13px">
+          <span style="color:var(--tx)">${co}</span>
+          <span style="color:var(--tx2)">${svcStr} / 총 <strong style="color:var(--acc)">${total}</strong>대</span>
+        </div>`;
+      }
+    });
+    html+=`</div>`;
+
+    // ── 당일 상세 ──
+    if(data.dayTotal===0){
+      html+=`<div style="background:var(--sur);border:1px solid var(--bd);border-radius:var(--r);padding:16px;text-align:center;color:var(--tx2);font-size:13px">${date} 작업 내역이 없습니다.</div>`;
+    } else {
+      const day=new Date(date);
+      const dayStr=['일','월','화','수','목','금','토'][day.getDay()];
+      html+=`<div style="background:var(--sur);border:1px solid var(--bd);border-radius:var(--r);padding:16px;margin-bottom:10px">
+        <div style="font-size:11px;font-weight:700;color:var(--tx2);letter-spacing:.08em;margin-bottom:10px">${date.replace(/-/g,'/')}(${dayStr}) 당일 — 총 ${data.dayTotal}대</div>`;
+
+      Object.entries(data.dayDetail).forEach(([co,d])=>{
+        const isTesla=d.type==='tesla';
+        html+=`<div style="margin-bottom:12px">
+          <div style="font-size:12px;font-weight:700;color:var(--tx2);margin-bottom:6px">${co}</div>`;
+
+        if(isTesla){
+          if(d.wash.length){
+            html+=`<div style="font-size:12px;color:var(--tx2);margin-bottom:4px">세차</div>`;
+            d.wash.forEach(c=>{
+              html+=`<div style="font-size:13px;padding:4px 0;color:var(--tx)">  - ${c.plate}${c.model?' ('+c.model+')':''}${c.note?' <span style="color:var(--acc)">*'+c.note+'</span>':''}</div>`;
+            });
+          }
+          if(d.polish.length){
+            html+=`<div style="font-size:12px;color:var(--tx2);margin:8px 0 4px">광택내역</div>`;
+            d.polish.forEach(c=>{
+              html+=`<div style="font-size:13px;padding:4px 0;color:var(--tx)">  - ${c.plate}: ${c.parts} / ${c.panels}판</div>`;
+            });
+          }
+        } else {
+          d.wash.forEach(c=>{
+            html+=`<div style="font-size:13px;padding:4px 0;color:var(--tx)">  - ${c.plate}${c.model?' ('+c.model+')':''}${c.service?' ['+c.service+']':''}${c.note?' <span style="color:var(--acc)">*'+c.note+'</span>':''}</div>`;
+          });
+        }
+        html+=`</div>`;
+      });
+      html+=`</div>`;
+    }
+
+    el.innerHTML=html;
+  }catch(e){
+    el.innerHTML=`<div style="padding:16px;color:var(--acc);font-size:13px">조회 오류 — 네트워크를 확인해주세요</div>`;
+  }
+}
 
 // ── 자동저장 / 복원 ──────────────────────────────────────────
 function save(){
