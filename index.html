@@ -330,10 +330,9 @@ async function queryReport(){
     const monthWash=Object.values(data.monthStats).reduce((a,s)=>a+(s.type==='tesla'?s.wash:Object.values(s.services||{}).reduce((x,y)=>x+y,0)),0);
     Object.entries(data.monthStats).forEach(([co,stat])=>{
       if(stat.type==='tesla'){
-        const total=stat.wash+(stat.polish||0);
         html+=`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd);font-size:13px">
           <span style="color:var(--tx)">${co}</span>
-          <span style="color:var(--tx2)">세차 <strong style="color:var(--tx)">${stat.wash}</strong>대 / 광택 <strong style="color:var(--tx)">${stat.polish}</strong>대 / 총 <strong style="color:var(--acc)">${total}</strong>대</span>
+          <span style="color:var(--tx2)">세차 <strong style="color:var(--tx)">${stat.wash}</strong>대 / 광택 <strong style="color:var(--tx)">${stat.polish}</strong>판</span>
         </div>`;
       } else {
         const total=Object.values(stat.services).reduce((a,b)=>a+b,0);
