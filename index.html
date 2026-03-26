@@ -77,7 +77,7 @@ select option{background:var(--sur2)}
 </style>
 </head>
 <body>
-<div class="hdr">
+<div class="hdr" id="app-root">
   <div class="logo">T</div>
   <div class="hdr-t">더트라이브 작업 보고</div>
   <div class="hdr-d" id="hd"></div>
@@ -126,6 +126,11 @@ let SC='',CI=0;
   const t=new Date(),mm=String(t.getMonth()+1).padStart(2,'0'),dd=String(t.getDate()).padStart(2,'0');
   document.getElementById('wd').value=`${t.getFullYear()}-${mm}-${dd}`;
   document.getElementById('hd').textContent=`${mm}/${dd}(${'일월화수목금토'[t.getDay()]})`;
+  // 자동저장 이벤트 등록
+  document.body.addEventListener('input',save);
+  document.body.addEventListener('change',save);
+  // 이전 임시저장 복원
+  setTimeout(restore, 100);
 })();
 function sco(co){
   SC=co;
@@ -256,12 +261,91 @@ async function sub(){
   const btn=document.querySelector('.sb');btn.disabled=true;btn.textContent='전송 중...';
   try{
     await fetch(SHEET_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
-    tst('✓ 제출 완료! 시트에 자동 적재됩니다','ok');btn.textContent='✓ 제출 완료';
+    tst('✓ 제출 완료! 시트에 자동 적재됩니다','ok');btn.textContent='✓ 제출 완료';clearDraft();
   }catch(e){
     tst('전송 오류 — 네트워크를 확인해주세요','err');btn.disabled=false;btn.textContent='작업 보고 제출';
   }
 }
 function tst(msg,type=''){const el=document.getElementById('toast');el.textContent=msg;el.className=`toast ${type} show`;setTimeout(()=>el.classList.remove('show'),3200);}
+
+// ── 자동저장 / 복원 ──────────────────────────────────────────
+function save(){
+  try{
+    const d={
+      date:document.getElementById('wd').value,
+      detailer:document.getElementById('det').value,
+      company:SC,
+      cars:[...document.querySelectorAll('.cc')].map(card=>{
+        const id=card.id.replace('cc','');
+        return{
+          plate:document.getElementById(`pl${id}`)?.value||'',
+          model:document.getElementById(`mo${id}`)?.value||'',
+          hasWash:document.getElementById(`ws${id}`)?.checked??true,
+          hasPolish:card.querySelectorAll('.tw input')[1]?.checked||false,
+          parts:[...card.querySelectorAll('.cki.on input')].map(x=>x.value).join(','),
+          extra:document.getElementById(`pe${id}`)?.value||'',
+          panels:document.getElementById(`pn${id}`)?.value||'',
+          svc:document.getElementById(`sv${id}`)?.value||'',
+          note:document.getElementById(`nt${id}`)?.value||'',
+        };
+      })
+    };
+    localStorage.setItem('detailing_draft',JSON.stringify(d));
+  }catch(e){}
+}
+
+function restore(){
+  try{
+    const raw=localStorage.getItem('detailing_draft');
+    if(!raw)return;
+    const d=JSON.parse(raw);
+    if(d.date) document.getElementById('wd').value=d.date;
+    if(d.detailer) document.getElementById('det').value=d.detailer;
+    if(d.company){
+      sco(d.company);
+      // 기본 1개 카드 제거 후 저장된 카드 복원
+      document.getElementById('cl').innerHTML='';CI=0;
+      d.cars.forEach(car=>{
+        ac();
+        const i=CI;
+        if(car.plate) document.getElementById(`pl${i}`).value=car.plate;
+        if(car.model){
+          const mo=document.getElementById(`mo${i}`);
+          if(mo) mo.value=car.model;
+        }
+        // 세차 토글
+        const wsCb=document.getElementById(`ws${i}`);
+        if(wsCb) wsCb.checked=car.hasWash!==false;
+        // 광택 토글
+        const polishCbs=document.getElementById(`cc${i}`)?.querySelectorAll('.tw input');
+        if(polishCbs&&polishCbs.length>1&&car.hasPolish){
+          polishCbs[1].checked=true;
+          document.getElementById(`pd${i}`)?.classList.add('show');
+          // 부위 체크
+          if(car.parts){
+            car.parts.split(',').forEach(p=>{
+              document.getElementById(`cc${i}`)?.querySelectorAll('.cki input').forEach(cb=>{
+                if(cb.value===p){cb.checked=true;cb.closest('.cki')?.classList.add('on');}
+              });
+            });
+          }
+          if(car.extra&&document.getElementById(`pe${i}`)) document.getElementById(`pe${i}`).value=car.extra;
+          if(car.panels&&document.getElementById(`pn${i}`)) document.getElementById(`pn${i}`).value=car.panels;
+        }
+        // 서비스 (마이바흐/벤틀리)
+        if(car.svc&&document.getElementById(`sv${i}`)) document.getElementById(`sv${i}`).value=car.svc;
+        if(car.note&&document.getElementById(`nt${i}`)) document.getElementById(`nt${i}`).value=car.note;
+        up(i);
+      });
+      uc();
+    }
+    tst('이전에 작성 중이던 내용을 불러왔습니다','ok');
+  }catch(e){}
+}
+
+function clearDraft(){
+  localStorage.removeItem('detailing_draft');
+}
 </script>
 </body>
 </html>
