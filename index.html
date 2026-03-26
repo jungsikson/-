@@ -324,9 +324,10 @@ async function queryReport(){
 
     // ── 이번 달 요약 ──
     let html=`<div style="background:var(--sur);border:1px solid var(--bd);border-radius:var(--r);padding:16px;margin-bottom:12px">
-      <div style="font-size:11px;font-weight:700;color:var(--tx2);letter-spacing:.08em;margin-bottom:8px">${data.year}년 ${data.month}월 누적 — ${name}</div>
+      <div style="font-size:11px;font-weight:700;color:var(--tx2);letter-spacing:.08em;margin-bottom:10px">${data.year}년 ${data.month}월 누적 — ${name}</div>
       <div style="font-size:22px;font-weight:700;color:var(--acc);margin-bottom:12px">총 ${data.monthTotal}대</div>`;
 
+    const monthWash=Object.values(data.monthStats).reduce((a,s)=>a+(s.type==='tesla'?s.wash:Object.values(s.services||{}).reduce((x,y)=>x+y,0)),0);
     Object.entries(data.monthStats).forEach(([co,stat])=>{
       if(stat.type==='tesla'){
         const total=stat.wash+(stat.polish||0);
