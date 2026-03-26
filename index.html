@@ -82,6 +82,10 @@ select option{background:var(--sur2)}
   <div class="hdr-t">더트라이브 작업 보고</div>
   <div class="hdr-d" id="hd"></div>
 </div>
+<div style="background:var(--sur);border-bottom:1px solid var(--bd);display:flex;">
+  <button id="tab-report" onclick="switchTab('report')" style="flex:1;background:none;border:none;border-bottom:2px solid var(--acc);color:var(--tx);font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;padding:12px;cursor:pointer;">작업 보고</button>
+  <button id="tab-query" onclick="switchTab('query')" style="flex:1;background:none;border:none;border-bottom:2px solid transparent;color:var(--tx2);font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:500;padding:12px;cursor:pointer;">내역 조회</button>
+</div>
 <div id="page-report">
 <div class="wrap">
   <div class="sec">
