@@ -69,6 +69,9 @@ select option{background:var(--sur2)}
 .sb:disabled{background:var(--sur3);color:var(--tx3);cursor:not-allowed;transform:none}
 .pvb{background:var(--sur2);border:1px solid var(--bd);border-radius:var(--rs);padding:14px;font-size:12px;line-height:1.8;color:var(--tx2);white-space:pre-wrap;font-family:'Space Grotesk',monospace;display:none;margin-top:12px}
 .pvb.show{display:block}
+.copy-btn{width:100%;background:var(--sur2);border:1px solid var(--bd2);border-radius:var(--rs);color:var(--tx2);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:500;padding:10px;transition:all .15s;display:none;margin-top:8px;align-items:center;justify-content:center;gap:6px}
+.copy-btn.show{display:flex}
+.copy-btn:hover{border-color:var(--acc);color:var(--acc);background:rgba(232,89,60,.05)}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--sur);border:1px solid var(--bd2);border-radius:100px;padding:10px 20px;font-size:13px;font-weight:500;box-shadow:0 4px 24px rgba(0,0,0,.4);transition:transform .3s cubic-bezier(.34,1.56,.64,1);z-index:999;white-space:nowrap}
 .toast.show{transform:translateX(-50%) translateY(0)}
 .toast.ok{color:var(--green);border-color:var(--green)}
@@ -112,6 +115,7 @@ select option{background:var(--sur2)}
   <div id="sa" style="display:none">
     <button class="sb" onclick="sub()">작업 보고 제출</button>
     <div class="pvb" id="pv"></div>
+    <button class="copy-btn" id="copy-report-btn" onclick="copyReport()">📋 복사하기</button>
   </div>
 </div>
 </div>
@@ -147,10 +151,8 @@ let SC='',CI=0;
   const t=new Date(),mm=String(t.getMonth()+1).padStart(2,'0'),dd=String(t.getDate()).padStart(2,'0');
   document.getElementById('wd').value=`${t.getFullYear()}-${mm}-${dd}`;
   document.getElementById('hd').textContent=`${mm}/${dd}(${'일월화수목금토'[t.getDay()]})`;
-  // 자동저장 이벤트 등록
   document.body.addEventListener('input',save);
   document.body.addEventListener('change',save);
-  // 이전 임시저장 복원
   setTimeout(restore, 100);
 })();
 function sco(co){
@@ -159,6 +161,7 @@ function sco(co){
   document.getElementById('cl').innerHTML='';CI=0;uc();
   ['cs','sa'].forEach(id=>document.getElementById(id).style.display='block');
   document.getElementById('pv').classList.remove('show');
+  document.getElementById('copy-report-btn').classList.remove('show');
   ac();
 }
 function ac(){
@@ -200,7 +203,7 @@ function tc(i){document.getElementById(`cc${i}`).classList.toggle('op');}
 function up(i){const v=document.getElementById(`pl${i}`).value.trim(),el=document.getElementById(`pp${i}`);el.textContent=v||'차량번호 입력 전';el.classList.toggle('em',!v);}
 function dc(e,i){e.stopPropagation();const el=document.getElementById(`cc${i}`);el.style.cssText+='opacity:0;transform:translateY(-6px);transition:all .15s';setTimeout(()=>{el.remove();uc();},150);}
 function uc(){document.getElementById('cn').textContent=document.querySelectorAll('.cc').length;}
-function tw_(cb,i){} // 세차 토글 — 수집 시 hasWash로 처리
+function tw_(cb,i){}
 function tp(cb,i){document.getElementById(`pd${i}`).classList.toggle('show',cb.checked);}
 function tpt(l){const c=l.querySelector('input');c.checked=!c.checked;l.classList.toggle('on',c.checked);}
 function col(){
@@ -231,54 +234,122 @@ function col(){
   });
   return{date,detailer:det,company:co,cars};
 }
+
+// 복사용 텍스트 생성 (슬래시 구분)
 function bpv(d){
   const day='일월화수목금토'[new Date(d.date).getDay()];
   const isHD=CO[d.company]?.t==='heydealer',iT=CO[d.company]?.t==='tesla';
   let t=`[${d.date.replace(/-/g,'/')}(${day}) 일일 작업 보고]\n■ 디테일러: ${d.detailer}  업체: ${d.company}\n■ 금일 작업대수: ${d.cars.length}대\n\n`;
   if(isHD){
     t+=`상품화\n`;
-    d.cars.forEach(c=>t+=`  - ${c.plate}${c.model?' ('+c.model+')':''}${c.note?' *'+c.note:''}\n`);
+    d.cars.forEach(c=>{
+      const parts=[c.plate,c.model,'상품화'].filter(Boolean).join('/');
+      t+=`  - ${parts}${c.note?' *'+c.note:''}\n`;
+    });
   } else if(iT){
     const washCars=d.cars.filter(c=>c.hasWash!==false);
     const polishCars=d.cars.filter(c=>c.hasPolish&&c.panels>0);
-    if(washCars.length){t+=`1. 세차\n`;washCars.forEach(c=>t+=`  - ${c.plate}${c.model?' ('+c.model+')':''}${c.note?' *'+c.note:''}\n`);}
-    if(polishCars.length){t+=`\n2. 광택내역\n`;polishCars.forEach(c=>t+=`  - ${c.plate}: ${c.parts} / ${c.panels}판\n`);}
+    if(washCars.length){
+      t+=`1. 세차\n`;
+      washCars.forEach(c=>{
+        const parts=[c.plate,c.model,'세차'].filter(Boolean).join('/');
+        t+=`  - ${parts}${c.note?' *'+c.note:''}\n`;
+      });
+    }
+    if(polishCars.length){
+      t+=`\n2. 광택내역\n`;
+      polishCars.forEach(c=>{
+        const parts=[c.plate,c.model,'광택',c.parts,c.panels+'판'].filter(Boolean).join('/');
+        t+=`  - ${parts}\n`;
+      });
+    }
   } else {
     t+=`1. 세차\n`;
-    d.cars.forEach(c=>t+=`  - ${c.plate}${c.model?' ('+c.model+')':''}${c.note?' *'+c.note:''}\n`);
+    d.cars.forEach(c=>{
+      const parts=[c.plate,c.model,c.service].filter(Boolean).join('/');
+      t+=`  - ${parts}${c.note?' *'+c.note:''}\n`;
+    });
   }
   return t;
 }
+
+// 제출 완료 후 복사
+function copyReport(){
+  const text=document.getElementById('pv').textContent;
+  if(!text)return;
+  navigator.clipboard.writeText(text).then(()=>tst('✓ 복사되었습니다','ok')).catch(()=>{
+    // fallback
+    const ta=document.createElement('textarea');
+    ta.value=text;document.body.appendChild(ta);ta.select();
+    document.execCommand('copy');document.body.removeChild(ta);
+    tst('✓ 복사되었습니다','ok');
+  });
+}
+
+// 조회 결과 복사용 텍스트 생성
+function buildQueryCopyText(data, date){
+  const day=new Date(date);
+  const dayStr=['일','월','화','수','목','금','토'][day.getDay()];
+  let t=`[${date.replace(/-/g,'/')}(${dayStr}) 당일 작업 — ${data.name}]\n`;
+  t+=`총 ${data.dayTotal}대\n\n`;
+
+  Object.entries(data.dayDetail).forEach(([co,d])=>{
+    t+=`■ ${co}\n`;
+    const isTesla=d.type==='tesla';
+    if(isTesla){
+      if(d.wash.length){
+        t+=`세차\n`;
+        d.wash.forEach(c=>{
+          const parts=[c.plate,c.model,'세차'].filter(Boolean).join('/');
+          t+=`  - ${parts}${c.note?' *'+c.note:''}\n`;
+        });
+      }
+      if(d.polish.length){
+        t+=`광택\n`;
+        d.polish.forEach(c=>{
+          const parts=[c.plate,c.model,'광택',c.parts,c.panels+'판'].filter(Boolean).join('/');
+          t+=`  - ${parts}\n`;
+        });
+      }
+    } else {
+      d.wash.forEach(c=>{
+        const parts=[c.plate,c.model,c.service].filter(Boolean).join('/');
+        t+=`  - ${parts}${c.note?' *'+c.note:''}\n`;
+      });
+    }
+    t+=`\n`;
+  });
+  return t.trim();
+}
+
 async function sub(){
   const d=col();
   if(!d.detailer){tst('이름을 입력해주세요','err');return;}
   if(!d.company){tst('업체를 선택해주세요','err');return;}
   if(!d.cars.length){tst('차량을 추가해주세요','err');return;}
 
-  // 마이바흐·벤틀리 서비스 미선택 체크
   const isLuxury=CO[d.company]?.t==='luxury';
   if(isLuxury){
     const missing=d.cars.find(c=>!c.service);
     if(missing){tst(`${missing.plate || '차량'} 서비스를 선택해주세요`,'err');return;}
   }
-  // 차종 미입력 체크 (헤이딜러 포함 모든 업체)
   const noModel=d.cars.find(c=>!c.model||c.model.trim()==='');
   if(noModel){tst(`${noModel.plate || '차량'} 차종을 입력해주세요`,'err');return;}
 
-  // 테슬라 전용 체크
   if(CO[d.company]?.t==='tesla'){
-    // 세차OFF + 광택OFF
     const empty=d.cars.find(c=>!c.hasWash && !c.hasPolish);
     if(empty){tst(`${empty.plate || '차량'} 세차 또는 광택을 선택해주세요`,'err');return;}
-    // 광택 ON인데 부위 미선택 + 기타 미입력
     const noParts=d.cars.find(c=>c.hasPolish && (!c.parts||c.parts.trim()===''));
     if(noParts){tst(`${noParts.plate || '차량'} 광택 작업 부위를 선택하거나 입력해주세요`,'err');return;}
-    // 광택 ON인데 판수 미입력
     const noPanels=d.cars.find(c=>c.hasPolish && (!c.panels||c.panels===0));
     if(noPanels){tst(`${noPanels.plate || '차량'} 광택 판수를 입력해주세요`,'err');return;}
   }
-  document.getElementById('pv').textContent=bpv(d);
+
+  const pvText=bpv(d);
+  document.getElementById('pv').textContent=pvText;
   document.getElementById('pv').classList.add('show');
+  document.getElementById('copy-report-btn').classList.add('show');
+
   const btn=document.querySelector('.sb');btn.disabled=true;btn.textContent='전송 중...';
   try{
     await fetch(SHEET_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
@@ -298,7 +369,6 @@ function switchTab(tab){
   document.getElementById('tab-query').style.borderBottomColor=tab==='query'?'var(--acc)':'transparent';
   document.getElementById('tab-query').style.color=tab==='query'?'var(--tx)':'var(--tx2)';
   document.getElementById('tab-query').style.fontWeight=tab==='query'?'700':'500';
-  // 조회 탭 열 때 오늘 날짜 + 이름 자동 입력
   if(tab==='query'){
     const t=new Date(),mm=String(t.getMonth()+1).padStart(2,'0'),dd=String(t.getDate()).padStart(2,'0');
     document.getElementById('q-date').value=`${t.getFullYear()}-${mm}-${dd}`;
@@ -322,12 +392,11 @@ async function queryReport(){
 
     if(data.status!=='ok'){el.innerHTML=`<div style="padding:16px;color:var(--acc);font-size:13px">오류: ${data.message}</div>`;return;}
 
-    // ── 이번 달 요약 ──
+    // 이번 달 요약
     let html=`<div style="background:var(--sur);border:1px solid var(--bd);border-radius:var(--r);padding:16px;margin-bottom:12px">
       <div style="font-size:11px;font-weight:700;color:var(--tx2);letter-spacing:.08em;margin-bottom:10px">${data.year}년 ${data.month}월 누적 — ${name}</div>
       <div style="font-size:22px;font-weight:700;color:var(--acc);margin-bottom:12px">총 ${data.monthTotal}대</div>`;
 
-    const monthWash=Object.values(data.monthStats).reduce((a,s)=>a+(s.type==='tesla'?s.wash:Object.values(s.services||{}).reduce((x,y)=>x+y,0)),0);
     Object.entries(data.monthStats).forEach(([co,stat])=>{
       if(stat.type==='tesla'){
         html+=`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd);font-size:13px">
@@ -345,7 +414,7 @@ async function queryReport(){
     });
     html+=`</div>`;
 
-    // ── 당일 상세 ──
+    // 당일 상세
     if(data.dayTotal===0){
       html+=`<div style="background:var(--sur);border:1px solid var(--bd);border-radius:var(--r);padding:16px;text-align:center;color:var(--tx2);font-size:13px">${date} 작업 내역이 없습니다.</div>`;
     } else {
@@ -363,23 +432,31 @@ async function queryReport(){
           if(d.wash.length){
             html+=`<div style="font-size:12px;color:var(--tx2);margin-bottom:4px">세차</div>`;
             d.wash.forEach(c=>{
-              html+=`<div style="font-size:13px;padding:4px 0;color:var(--tx)">  - ${c.plate}${c.model?' ('+c.model+')':''}${c.note?' <span style="color:var(--acc)">*'+c.note+'</span>':''}</div>`;
+              const parts=[c.plate,c.model,'세차'].filter(Boolean).join('/');
+              html+=`<div style="font-size:13px;padding:4px 0;color:var(--tx)">  - ${parts}${c.note?' <span style="color:var(--acc)">*'+c.note+'</span>':''}</div>`;
             });
           }
           if(d.polish.length){
             html+=`<div style="font-size:12px;color:var(--tx2);margin:8px 0 4px">광택내역</div>`;
             d.polish.forEach(c=>{
-              html+=`<div style="font-size:13px;padding:4px 0;color:var(--tx)">  - ${c.plate}: ${c.parts} / ${c.panels}판</div>`;
+              const parts=[c.plate,c.model,'광택',c.parts,c.panels+'판'].filter(Boolean).join('/');
+              html+=`<div style="font-size:13px;padding:4px 0;color:var(--tx)">  - ${parts}</div>`;
             });
           }
         } else {
           d.wash.forEach(c=>{
-            html+=`<div style="font-size:13px;padding:4px 0;color:var(--tx)">  - ${c.plate}${c.model?' ('+c.model+')':''}${c.service?' ['+c.service+']':''}${c.note?' <span style="color:var(--acc)">*'+c.note+'</span>':''}</div>`;
+            const parts=[c.plate,c.model,c.service].filter(Boolean).join('/');
+            html+=`<div style="font-size:13px;padding:4px 0;color:var(--tx)">  - ${parts}${c.note?' <span style="color:var(--acc)">*'+c.note+'</span>':''}</div>`;
           });
         }
         html+=`</div>`;
       });
-      html+=`</div>`;
+
+      // 당일 복사 버튼
+      const copyText=buildQueryCopyText(data, date);
+      html+=`</div>
+      <button onclick="copyQueryResult()" style="width:100%;background:var(--sur2);border:1px solid var(--bd2);border-radius:var(--rs);color:var(--tx2);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:500;padding:10px;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:4px" id="copy-query-btn">📋 당일 결과 복사하기</button>
+      <textarea id="copy-query-text" style="position:absolute;opacity:0;pointer-events:none;height:0">${copyText}</textarea>`;
     }
 
     el.innerHTML=html;
@@ -388,7 +465,18 @@ async function queryReport(){
   }
 }
 
-// ── 자동저장 / 복원 ──────────────────────────────────────────
+function copyQueryResult(){
+  const ta=document.getElementById('copy-query-text');
+  if(!ta)return;
+  const text=ta.value;
+  navigator.clipboard.writeText(text).then(()=>tst('✓ 복사되었습니다','ok')).catch(()=>{
+    ta.style.height='1px';ta.select();
+    document.execCommand('copy');ta.style.height='0';
+    tst('✓ 복사되었습니다','ok');
+  });
+}
+
+// 자동저장 / 복원
 function save(){
   try{
     const d={
@@ -423,7 +511,6 @@ function restore(){
     if(d.detailer) document.getElementById('det').value=d.detailer;
     if(d.company){
       sco(d.company);
-      // 기본 1개 카드 제거 후 저장된 카드 복원
       document.getElementById('cl').innerHTML='';CI=0;
       d.cars.forEach(car=>{
         ac();
@@ -433,15 +520,12 @@ function restore(){
           const mo=document.getElementById(`mo${i}`);
           if(mo) mo.value=car.model;
         }
-        // 세차 토글
         const wsCb=document.getElementById(`ws${i}`);
         if(wsCb) wsCb.checked=car.hasWash!==false;
-        // 광택 토글
         const polishCbs=document.getElementById(`cc${i}`)?.querySelectorAll('.tw input');
         if(polishCbs&&polishCbs.length>1&&car.hasPolish){
           polishCbs[1].checked=true;
           document.getElementById(`pd${i}`)?.classList.add('show');
-          // 부위 체크
           if(car.parts){
             car.parts.split(',').forEach(p=>{
               document.getElementById(`cc${i}`)?.querySelectorAll('.cki input').forEach(cb=>{
@@ -452,7 +536,6 @@ function restore(){
           if(car.extra&&document.getElementById(`pe${i}`)) document.getElementById(`pe${i}`).value=car.extra;
           if(car.panels&&document.getElementById(`pn${i}`)) document.getElementById(`pn${i}`).value=car.panels;
         }
-        // 서비스 (마이바흐/벤틀리)
         if(car.svc&&document.getElementById(`sv${i}`)) document.getElementById(`sv${i}`).value=car.svc;
         if(car.note&&document.getElementById(`nt${i}`)) document.getElementById(`nt${i}`).value=car.note;
         up(i);
