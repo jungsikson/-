@@ -30,6 +30,7 @@ select option{background:var(--sur2)}
 .cob[data-c="마이바흐"].on{background:#2E7D32;border-color:#2E7D32;color:#fff}
 .cob[data-c="벤틀리"].on{background:#B45309;border-color:#B45309;color:#fff}
 .cob[data-c="헤이딜러"].on{background:#0E6674;border-color:#0E6674;color:#fff}
+.cob[data-c="마이바흐서비스센터"].on{background:#455A64;border-color:#455A64;color:#fff}
 .cl{display:flex;flex-direction:column;gap:10px}
 .cc{background:var(--sur2);border:1px solid var(--bd);border-radius:var(--rs);overflow:hidden;animation:si .18s ease}
 .chd{display:flex;align-items:center;padding:10px 14px;gap:10px;cursor:pointer;user-select:none}
@@ -104,6 +105,7 @@ select option{background:var(--sur2)}
       <button class="cob" data-c="마이바흐"   onclick="sco('마이바흐')">마이바흐</button>
       <button class="cob" data-c="벤틀리"     onclick="sco('벤틀리')">벤틀리</button>
       <button class="cob" data-c="헤이딜러"   onclick="sco('헤이딜러')">헤이딜러</button>
+      <button class="cob" data-c="마이바흐서비스센터" onclick="sco('마이바흐서비스센터')">마이바흐 서비스센터</button>
     </div></div>
   </div>
   <div class="sec" id="cs" style="display:none">
@@ -143,6 +145,7 @@ const CO={
   '마이바흐':  {t:'luxury',  m:['세단','SUV']},
   '벤틀리':    {t:'luxury',  m:['세단','SUV']},
   '헤이딜러':  {t:'heydealer',m:[]},
+  '마이바흐서비스센터':{t:'luxury',m:['세단','SUV']},
 };
 const PARTS=['보닛','앞범퍼','뒷범퍼','운전석앞휀다','조수석앞휀다','운전석뒤휀다','조수석뒤휀다','운전석앞도어','조수석앞도어','운전석뒤도어','조수석뒤도어','트렁크','루프'];
 const SVCS=['외부만','내부만','내외부'];
