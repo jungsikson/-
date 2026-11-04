@@ -278,6 +278,21 @@ select.edited,input.edited{border-color:var(--orange);box-shadow:0 0 0 1px var(-
 // 원부조회 중계 (오토랩 Supabase). 원부 주소가 브라우저 직접 호출을 막아 둬서 거친다
 const WONBU_RELAY='https://tzxsjwkahzosmvmvpxxc.supabase.co/functions/v1/wonbu-relay';
 const SHEET_URL='https://script.google.com/macros/s/AKfycbx-zVXVpCcv_ZrDKD7IK10raG-YLOdnuFdMdDHJK0EtafpO8jpQ3v5bIpPfD4T5Yq9MDw/exec';
+// 저장·조회는 Supabase API가 먼저, 안 되면 시트 스크립트로 (둘 다 같은 시트에 같은 규칙으로 쓴다)
+const API_URL='https://tzxsjwkahzosmvmvpxxc.supabase.co/functions/v1/report-api';
+async function api(qs,body){
+  const opt=body?{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)}:{};
+  try{
+    const ctl=new AbortController();const to=setTimeout(()=>ctl.abort(),20000);
+    const r=await fetch(API_URL+(qs?'?'+qs:''),{...opt,signal:ctl.signal});clearTimeout(to);
+    const j=await r.json();
+    if(r.ok)return j;
+    // 검사 결과(오류 문구)는 그대로, 서버 자체 오류만 플랜 B로
+    if(j&&j.status==='error'&&r.status<500)return j;
+  }catch(e){}
+  const r=await fetch(SHEET_URL+(qs?'?'+qs:''),opt);
+  return r.json();
+}
 const CO={
   '인천테슬라':{t:'tesla',   m:['모델3','모델Y','모델X','모델S']},
   '마이바흐':  {t:'luxury',  m:['세단','SUV']},
@@ -468,7 +483,7 @@ function setSrc(i){
 // 마이바흐·벤틀리 정기 차량: 눌러서 추가
 async function loadFleet(co){
   try{
-    const r=await (await fetch(`${SHEET_URL}?action=fleet&company=${encodeURIComponent(co)}`)).json();
+    const r=await api(`action=fleet&company=${encodeURIComponent(co)}`);
     if(SC!==co||r.status!=='ok'||!r.cars.length)return;
     $('fleet').innerHTML=`<span class="lb">자주 오는 차 — 눌러서 추가</span><div class="ckg">${r.cars.map(c=>`<button class="cki fl" data-p="${esc(c.plate)}" onclick="pick('${esc(c.plate)}')">${esc(c.plate)}<small>${esc(c.model)}</small></button>`).join('')}</div>`;
     markFleet();
@@ -691,8 +706,7 @@ function dayToCars(co,rows){
 }
 // 결과를 실제로 받아 본다 (text/plain이면 Apps Script가 사전요청 없이 응답)
 async function post(body){
-  const r=await fetch(SHEET_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});
-  return r.json();
+  return api('',body);
 }
 // 제출 뒤 차량 목록을 비워 같은 보고가 다시 나가지 않게. 보고 문구·복사 버튼은 남긴다
 function resetCars(){
@@ -743,8 +757,7 @@ async function queryMonth(){
   const el=$('q-result');
   el.innerHTML='<div class="empty">불러오는 중...</div>';
   try{
-    const res=await fetch(`${SHEET_URL}?action=month&name=${encodeURIComponent(name)}&ym=${ym}`);
-    const data=await res.json();
+    const data=await api(`action=month&name=${encodeURIComponent(name)}&ym=${ym}`);
     if(data.status!=='ok'){el.innerHTML=`<div class="empty" style="color:var(--bad)">${esc(data.message)}</div>`;return;}
 
     let h=`<section class="qsum">
