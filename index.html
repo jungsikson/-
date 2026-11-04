@@ -265,6 +265,8 @@ const CO={
 const PARTS=['보닛','앞범퍼','뒷범퍼','운전석앞휀다','조수석앞휀다','운전석뒤휀다','조수석뒤휀다','운전석앞도어','조수석앞도어','운전석뒤도어','조수석뒤도어','트렁크','루프'];
 const SVCS=['외부만','내부만','내외부'];
 const PLATE_RE=/^\d{2,3}[가-힣]\d{4}$/;
+// 마이바흐·벤틀리는 전시차·신차처럼 번호판 없는 차가 있어 막지 않고 확인창에서 한 번 더 보여준다
+const plateStrict=()=>CO[SC]?.t!=='luxury';
 const MAX_PAST=7;
 let SC='',CI=0;
 
@@ -366,15 +368,15 @@ function tc(i){$(`cc${i}`).classList.toggle('op');}
 function up(i){
   const v=$(`pl${i}`).value.trim(),el=$(`pp${i}`);
   el.textContent=v||'차량번호 입력 전';el.classList.toggle('em',!v);
-  if(PLATE_RE.test(v)||!v){$(`pl${i}`).classList.remove('bad');$(`pe-${i}`).classList.remove('show');}
+  if(PLATE_RE.test(v)||!v||!plateStrict()){$(`pl${i}`).classList.remove('bad');if(PLATE_RE.test(v)||!v)$(`pe-${i}`).classList.remove('show');}
   dupMark();
 }
 // 번호판 형식은 칸을 벗어날 때 바로 알려준다
 function vp(i){
   const v=$(`pl${i}`).value.trim();
   const bad=v&&!PLATE_RE.test(v);
-  $(`pl${i}`).classList.toggle('bad',bad);
-  $(`pe-${i}`).textContent=bad?'형식 확인 (예: 03소7917)':'';
+  $(`pl${i}`).classList.toggle('bad',bad&&plateStrict());
+  $(`pe-${i}`).textContent=bad?(plateStrict()?'형식 확인 (예: 03소7917)':'번호판 형식이 아닙니다. 번호판 없는 차면 그대로 두세요'):'';
   $(`pe-${i}`).classList.toggle('show',bad);
   dupMark();
 }
@@ -483,7 +485,8 @@ async function sub(){
   }
   // 번호판 형식·같은 보고 안 중복
   const badPlate=d.cars.find(c=>!PLATE_RE.test(c.plate));
-  if(badPlate){tst(`${badPlate.plate} 차량번호 형식을 확인해주세요`,'err');return;}
+  if(badPlate&&plateStrict()){tst(`${badPlate.plate} 차량번호 형식을 확인해주세요`,'err');return;}
+  const oddPlates=d.cars.filter(c=>!PLATE_RE.test(c.plate));
   const seen={};
   for(const c of d.cars){if(seen[c.plate]){tst(`${c.plate} 차량이 두 번 들어가 있습니다`,'err');return;}seen[c.plate]=1;}
   // 날짜
@@ -494,7 +497,8 @@ async function sub(){
 
   const list=`<ul class="plist">${d.cars.map(c=>`<li><span class="p">${esc(c.plate)}</span><span class="m">${esc(carDesc(d.company,c))}</span></li>`).join('')}</ul>`;
   const dateAlert=back===0?'':`<div class="alert warn"><b>오늘이 아닌 날짜입니다</b>${fd(d.date)} 작업으로 들어갑니다 (${back}일 전)</div>`;
-  if(!await ask({title:`${fd(d.date)} · ${d.cars.length}대`,sub:`${d.company} · ${d.detailer}`,body:dateAlert+list,ok:'제출'}))return;
+  const plateAlert=oddPlates.length?`<div class="alert warn"><b>번호판 형식이 아닌 차량</b>${oddPlates.map(c=>esc(c.plate)).join(', ')} — 번호판 없는 차가 맞는지 확인해주세요</div>`:'';
+  if(!await ask({title:`${fd(d.date)} · ${d.cars.length}대`,sub:`${d.company} · ${d.detailer}`,body:dateAlert+plateAlert+list,ok:'제출'}))return;
 
   lsSet('detailing_name',d.detailer);
   const btn=$('subBtn');btn.disabled=true;btn.textContent='저장 중...';
