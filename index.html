@@ -477,6 +477,9 @@ function up(i){
   el.textContent=v||'차량번호 입력 전';el.classList.toggle('em',!v);
   if(PLATE_RE.test(v)||!v||!plateStrict()){$(`pl${i}`).classList.remove('bad');if(PLATE_RE.test(v)||!v)$(`pe-${i}`).classList.remove('show');}
   dupMark();
+  // 번호를 다 치는 순간 원부조회 — 칸을 벗어날 때까지 기다리지 않는다
+  clearTimeout(up['t'+i]);
+  if(PLATE_RE.test(v))up['t'+i]=setTimeout(()=>lookup(i),250);
 }
 // 번호판 형식은 칸을 벗어날 때 바로 알려준다
 function vp(i){
