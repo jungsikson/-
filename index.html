@@ -95,6 +95,22 @@ input.bad{border-color:var(--bad)}
 .cki input{display:none}
 .cki.on{background:var(--ink);border-color:var(--ink);color:#fff}
 .note-row{margin-top:14px}
+.wi{font-size:13px;color:var(--ink-2);margin-top:6px;min-height:18px}
+.wi.ok b{color:var(--ink);font-weight:600}
+.wi.fail{color:var(--warn);font-weight:500}
+.ml{display:flex;align-items:center;gap:6px}
+.src{display:none;font-size:12px;font-weight:600;border-radius:9px;padding:1px 8px;margin-left:auto;white-space:nowrap}
+.ml{white-space:nowrap}
+.wi .wx{color:var(--ink);font-weight:600}
+.src.show{display:inline-block}
+.src.w{background:var(--gray-15);color:var(--ink-2)}
+.src.e{background:var(--orange-soft);color:var(--ink)}
+.src.m{background:#FFF1DC;color:var(--warn)}
+select.edited,input.edited{border-color:var(--orange);box-shadow:0 0 0 1px var(--orange)}
+.fleet{margin-bottom:14px}
+.fleet .ckg{margin-top:2px}
+.fl{min-height:40px;padding:0 14px;font-size:15px}
+.fl small{color:inherit;opacity:.7;margin-left:4px;font-size:12px}
 
 .ab{width:100%;min-height:var(--h);background:var(--bg);border:1px dashed var(--gray-30);border-radius:var(--rs);color:var(--ink);cursor:pointer;font-size:15px;font-weight:600;margin-top:10px}
 .ab:active{background:var(--gray-08)}
@@ -211,6 +227,7 @@ input.bad{border-color:var(--bad)}
 
   <section class="sec" id="cs" style="display:none">
     <h2 class="sh">작업 차량 <span class="ct">총 <b class="num" id="cn">0</b>대</span></h2>
+    <div class="fleet" id="fleet"></div>
     <div class="cl" id="cl"></div>
     <button class="ab" onclick="ac()">+ 차량 추가</button>
   </section>
@@ -254,6 +271,8 @@ input.bad{border-color:var(--bad)}
 </div></div>
 
 <script>
+// 원부조회 중계 (오토랩 Supabase). 원부 주소가 브라우저 직접 호출을 막아 둬서 거친다
+const WONBU_RELAY='https://tzxsjwkahzosmvmvpxxc.supabase.co/functions/v1/wonbu-relay';
 const SHEET_URL='https://script.google.com/macros/s/AKfycbx-zVXVpCcv_ZrDKD7IK10raG-YLOdnuFdMdDHJK0EtafpO8jpQ3v5bIpPfD4T5Yq9MDw/exec';
 const CO={
   '인천테슬라':{t:'tesla',   m:['모델3','모델Y','모델X','모델S']},
@@ -327,13 +346,16 @@ function sco(co){
   $('cl').innerHTML='';CI=0;uc();
   ['cs','sa'].forEach(id=>$(id).style.display='block');
   $('done').classList.remove('show');
+  $('fleet').innerHTML='';
+  if(CO[co].t==='luxury')loadFleet(co);
   ac();
 }
 function ac(){
   const i=++CI,iT=CO[SC].t==='tesla',isHD=CO[SC].t==='heydealer';
   const mo='<option value="">선택</option>'+CO[SC].m.map(m=>`<option>${m}</option>`).join('');
   const noteHTML=`<div class="note-row"><label for="nt${i}">특이사항 (선택)</label><textarea id="nt${i}" placeholder="예) 정산 제외, 클레임" rows="2"></textarea></div>`;
-  const modelSel=isHD?`<div><label for="mo${i}">차종</label><input type="text" id="mo${i}" placeholder="예) 스포티지" autocomplete="off"></div>`:`<div><label for="mo${i}">차종</label><select id="mo${i}">${mo}</select></div>`;
+  const mlab=`<label for="mo${i}" class="ml">차종 <span class="src" id="ms${i}"></span></label>`;
+  const modelSel=isHD?`<div>${mlab}<input type="text" id="mo${i}" placeholder="번호 입력 시 원부로 채워짐" autocomplete="off" oninput="mchg(${i})"></div>`:`<div>${mlab}<select id="mo${i}" onchange="mchg(${i})">${mo}</select></div>`;
   const sh=isHD ? noteHTML
     : iT ? `<div class="pr"><span class="pl">세차</span><label class="tw" aria-label="세차"><input type="checkbox" id="ws${i}" checked><span class="ts"></span></label></div>
       <div class="pr"><span class="pl">광택</span><label class="tw" aria-label="광택"><input type="checkbox" onchange="tp(this,${i})"><span class="ts"></span></label></div>
@@ -359,10 +381,95 @@ function ac(){
           <div><label for="pl${i}">차량번호</label><input type="text" id="pl${i}" placeholder="예) 03소7917" oninput="this.value=this.value.replace(/\\s/g,'');up(${i})" onblur="vp(${i})" onkeydown="if(event.key===' ')event.preventDefault()" autocomplete="off" autocapitalize="off"><div class="perr" id="pe-${i}"></div></div>
           ${modelSel}
         </div>
+        <div class="wi" id="wi${i}"></div>
         ${sh}
       </div>
     </div>`);
   uc();setTimeout(()=>$(`pl${i}`)?.focus(),50);
+}
+// ── 원부조회: 번호를 넣으면 차종을 채운다. 실패하면 직접 고른다(플랜 B) ──
+const WC={},WS={}; // WC: 번호→원부 결과, WS: 카드→{plate,auto,res,src,busy}
+function autoVal(res){
+  if(!res||res.status!=='ok')return '';
+  const t=CO[SC].t;
+  return t==='tesla'?res.tesla:t==='luxury'?res.body:res.model;
+}
+async function lookup(i){
+  const el=$(`pl${i}`);if(!el)return;
+  const plate=el.value.trim(),st=WS[i]=WS[i]||{};
+  if(st.plate===plate&&st.res)return;
+  st.plate=plate;st.res=null;st.auto='';st.wiHtml='';
+  const wi=$(`wi${i}`);
+  if(!plate){wi.textContent='';wi.className='wi';setSrc(i);return;}
+  if(!PLATE_RE.test(plate)){
+    if(!plateStrict()){wi.textContent='번호판 형식이 아닙니다. 번호판 없는 차(전시차·신차)면 차종을 직접 골라주세요';wi.className='wi fail';st.src='직접';setSrc(i);}
+    return;
+  }
+  wi.textContent='원부 조회 중...';wi.className='wi';st.busy=true;
+  let res=WC[plate];
+  if(!res){
+    try{
+      const ctl=new AbortController();const to=setTimeout(()=>ctl.abort(),12000);
+      const r=await fetch(`${WONBU_RELAY}?plate=${encodeURIComponent(plate)}`,{signal:ctl.signal});clearTimeout(to);
+      res=await r.json();
+    }catch(e){res={status:'fail',reason:'원부조회 연결 실패'};}
+    if(res.status==='ok')WC[plate]=res;
+  }
+  st.busy=false;
+  if($(`pl${i}`)?.value.trim()!==plate)return; // 그 사이 번호가 바뀜
+  st.res=res;
+  if(res.status!=='ok'){
+    wi.innerHTML=`원부조회 안 됨 (${esc(res.reason||'오류')}) — 번호가 맞는지 보고, 차종을 직접 넣어주세요`;wi.className='wi fail';
+    st.src='직접';setSrc(i);return;
+  }
+  st.wiHtml=`원부 · <b>${esc(res.model)}</b> · ${esc(res.year||'')} · ${esc(res.color||'')}`;wi.innerHTML=st.wiHtml;wi.className='wi ok';
+  st.auto=autoVal(res);
+  const mo=$(`mo${i}`);
+  // 비어 있거나 직접 고친 적 없으면 원부 값으로 채운다
+  if(st.auto&&(!mo.value||st.src!=='수정')){
+    if(mo.tagName==='SELECT'&&![...mo.options].some(o=>o.value===st.auto)){st.auto='';}
+    else mo.value=st.auto;
+  }
+  if(!st.auto){st.wiHtml+=' — 차종을 직접 골라주세요';wi.innerHTML=st.wiHtml;st.src='직접';}
+  else st.src=mo.value===st.auto?'원부':'수정';
+  setSrc(i);save();
+}
+function mchg(i){
+  const st=WS[i]=WS[i]||{};const v=$(`mo${i}`).value;
+  st.src=st.auto?(v===st.auto?'원부':'수정'):'직접';
+  setSrc(i);
+}
+function setSrc(i){
+  const st=WS[i]||{},el=$(`ms${i}`),mo=$(`mo${i}`);if(!el)return;
+  const map={원부:['원부','w'],수정:['직접 수정','e'],직접:['직접 입력','m']};
+  const m=map[st.src];
+  el.className='src'+(m?' show '+m[1]:'');el.textContent=m?m[0]:'';
+  mo.classList.toggle('edited',st.src==='수정');
+  // 원부와 다르게 고쳤으면 안내 줄에 무엇을 무엇으로 고쳤는지
+  const wi=$(`wi${i}`);
+  if(wi&&st.wiHtml)wi.innerHTML=st.wiHtml+(st.src==='수정'?` <span class="wx">— 원부는 ${esc(st.auto)}, ${esc(mo.value)}로 고침</span>`:'');
+}
+// 마이바흐·벤틀리 정기 차량: 눌러서 추가
+async function loadFleet(co){
+  try{
+    const r=await (await fetch(`${SHEET_URL}?action=fleet&company=${encodeURIComponent(co)}`)).json();
+    if(SC!==co||r.status!=='ok'||!r.cars.length)return;
+    $('fleet').innerHTML=`<span class="lb">자주 오는 차 — 눌러서 추가</span><div class="ckg">${r.cars.map(c=>`<button class="cki fl" data-p="${esc(c.plate)}" onclick="pick('${esc(c.plate)}')">${esc(c.plate)}<small>${esc(c.model)}</small></button>`).join('')}</div>`;
+    markFleet();
+  }catch(e){}
+}
+function pick(plate){
+  const cards=[...document.querySelectorAll('.cc')];
+  const has=cards.find(c=>$(`pl${c.id.slice(2)}`).value.trim()===plate);
+  if(has){dc({stopPropagation(){}},has.id.slice(2));setTimeout(markFleet,200);return;}
+  let empty=cards.find(c=>!$(`pl${c.id.slice(2)}`).value.trim());
+  if(!empty){ac();empty=$(`cc${CI}`);}
+  const i=empty.id.slice(2);
+  $(`pl${i}`).value=plate;up(i);vp(i);markFleet();save();
+}
+function markFleet(){
+  const on=new Set([...document.querySelectorAll('.cc')].map(c=>$(`pl${c.id.slice(2)}`).value.trim()));
+  document.querySelectorAll('#fleet .fl').forEach(b=>b.classList.toggle('on',on.has(b.dataset.p)));
 }
 function tc(i){$(`cc${i}`).classList.toggle('op');}
 function up(i){
@@ -376,9 +483,10 @@ function vp(i){
   const v=$(`pl${i}`).value.trim();
   const bad=v&&!PLATE_RE.test(v);
   $(`pl${i}`).classList.toggle('bad',bad&&plateStrict());
-  $(`pe-${i}`).textContent=bad?(plateStrict()?'형식 확인 (예: 03소7917)':'번호판 형식이 아닙니다. 번호판 없는 차면 그대로 두세요'):'';
-  $(`pe-${i}`).classList.toggle('show',bad);
+  $(`pe-${i}`).textContent=bad&&plateStrict()?'형식 확인 (예: 03소7917)':'';
+  $(`pe-${i}`).classList.toggle('show',bad&&plateStrict());
   dupMark();
+  lookup(i);
 }
 // 같은 보고 안에 같은 번호가 두 번이면 바로 표시
 function dupMark(){
@@ -388,9 +496,9 @@ function dupMark(){
     const i=c.id.slice(2),v=$(`pl${i}`).value.trim(),e=$(`pe-${i}`);
     if(v&&cnt[v]>1){e.textContent='위에 같은 번호가 이미 있습니다';e.classList.add('show');$(`pl${i}`).classList.add('bad');}
     else if(e.textContent==='위에 같은 번호가 이미 있습니다'){e.textContent='';e.classList.remove('show');$(`pl${i}`).classList.remove('bad');}
-  });
+  });  markFleet();
 }
-function dc(e,i){e.stopPropagation();const el=$(`cc${i}`);el.style.cssText+='opacity:0;transform:translateY(-6px);transition:all .15s';setTimeout(()=>{el.remove();uc();dupMark();save();},150);}
+function dc(e,i){e.stopPropagation();const el=$(`cc${i}`);el.style.cssText+='opacity:0;transform:translateY(-6px);transition:all .15s';setTimeout(()=>{el.remove();delete WS[i];uc();dupMark();markFleet();save();},150);}
 function uc(){$('cn').textContent=document.querySelectorAll('.cc').length;}
 function tp(cb,i){$(`pd${i}`).classList.toggle('show',cb.checked);}
 function tpt(e,l){e.preventDefault();const c=l.querySelector('input');c.checked=!c.checked;l.classList.toggle('on',c.checked);save();}
@@ -404,8 +512,10 @@ function col(){
     const model=$(`mo${id}`)?.value||'';
     const note=$(`nt${id}`)?.value.trim()||'';
     if(!plate)return;
+    const st=WS[id]||{},w=st.res&&st.res.status==='ok'?st.res:null;
+    const wonbu={model:w?w.model:'',type:w?w.type:'',year:w?w.year:'',src:st.src||'직접'};
     if(isHD){
-      cars.push({plate,model,service:'상품화',note});
+      cars.push({plate,model,service:'상품화',note,wonbu});
     } else if(iT){
       const hasWash=$(`ws${id}`)?$(`ws${id}`).checked:true;
       const sw=[...card.querySelectorAll('.tw input')];
@@ -414,9 +524,9 @@ function col(){
       const extraPart=(hp&&$(`pe${id}`)?.value.trim())||'';
       if(extraPart) checkedParts.push(extraPart);
       const panels=hp?(parseInt($(`pn${id}`)?.value)||0):0;
-      cars.push({plate,model,hasWash,hasPolish:hp,parts:checkedParts.join(','),panels,note});
+      cars.push({plate,model,hasWash,hasPolish:hp,parts:checkedParts.join(','),panels,note,wonbu});
     } else {
-      cars.push({plate,model,service:$(`sv${id}`)?.value||'',note});
+      cars.push({plate,model,service:$(`sv${id}`)?.value||'',note,wonbu});
     }
   });
   return{date,detailer:det,company:co,cars};
@@ -459,11 +569,16 @@ function copyReport(){
 }
 
 function carDesc(co,c){
+  const tag=c.wonbu&&c.wonbu.src!=='원부'?` · ${c.wonbu.src==='수정'?'차종 직접 수정':'차종 직접 입력'}`:'';
+  return carDesc0(co,c)+tag;
+}
+function carDesc0(co,c){
   if(CO[co].t==='tesla')return [c.model,c.hasWash!==false?'세차':'',c.hasPolish&&c.panels?`광택 ${c.panels}판`:''].filter(Boolean).join(' · ');
   return [c.model,c.service].filter(Boolean).join(' · ');
 }
 
 async function sub(){
+  if(Object.values(WS).some(w=>w.busy)){tst('원부 조회 중입니다. 잠시 후 다시 눌러주세요','err');return;}
   const d=col();
   if(!d.detailer){tst('이름을 입력해주세요','err');$('det').focus();return;}
   if(!d.company){tst('업체를 선택해주세요','err');return;}
@@ -708,7 +823,7 @@ async function restore(){
       }
       if(car.svc&&$(`sv${i}`))$(`sv${i}`).value=car.svc;
       if(car.note&&$(`nt${i}`))$(`nt${i}`).value=car.note;
-      up(i);
+      up(i);lookup(i);
     });
     uc();
     tst('작성 중이던 보고를 불러왔습니다');
