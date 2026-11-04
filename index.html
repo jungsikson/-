@@ -320,7 +320,7 @@ async function api(qs,body){
   return r.json();
 }
 const CO={
-  '인천테슬라':{t:'tesla',   m:['모델3','모델Y','모델X','모델S']},
+  '인천테슬라':{t:'tesla',   m:['모델3','모델Y','모델X','모델S','사이버트럭','테슬라 아님']},
   '마이바흐':  {t:'luxury',  m:['세단','SUV']},
   '벤틀리':    {t:'luxury',  m:['세단','SUV']},
   '헤이딜러':  {t:'heydealer',m:[]},
@@ -473,7 +473,9 @@ const WC={},WS={}; // WC: 번호→원부 결과, WS: 카드→{plate,auto,res,s
 function autoVal(res){
   if(!res||res.status!=='ok')return '';
   const t=CO[SC].t;
-  return t==='tesla'?res.tesla:t==='luxury'?res.body:res.model;
+  // 인천: 사이버트럭·테슬라 아닌 차(직원차량 등)도 자동으로 — 단가는 인천 (공통) 세차 40,000
+  if(t==='tesla')return res.tesla||(/cybertruck/i.test(res.model||'')?'사이버트럭':'테슬라 아님');
+  return t==='luxury'?res.body:res.model;
 }
 async function lookup(i){
   const el=$(`pl${i}`);if(!el)return;
@@ -606,11 +608,12 @@ function col(){
   document.querySelectorAll('.cc').forEach(card=>{
     const id=card.id.replace('cc','');
     const plate=($(`pl${id}`)?.value||'').replace(/\s/g,'');
-    const model=$(`mo${id}`)?.value||'';
+    let model=$(`mo${id}`)?.value||'';
     const note=$(`nt${id}`)?.value.trim()||'';
     if(!plate)return;
     const st=WS[id]||{},w=st.res&&st.res.status==='ok'?st.res:null;
     const wonbu={model:w?w.model:'',type:w?w.type:'',year:w?w.year:'',src:st.src||'직접'};
+    if(model==='테슬라 아님'&&w)model=w.model; // 시트에는 원부 모델명으로
     if(isHD){
       cars.push({plate,model,service:'상품화',note,wonbu});
     } else if(iT){
