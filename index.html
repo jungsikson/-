@@ -125,6 +125,9 @@ input.bad{border-color:var(--bad)}
 .sheet-b{overflow-y:auto;flex:1;margin-bottom:16px}
 .sheet-a{display:grid;grid-template-columns:1fr 2fr;gap:8px}
 .sheet-a .btn2{margin:0}
+.btn3{display:none;width:100%;min-height:44px;margin-top:8px;background:none;border:none;color:var(--ink-2);font-size:15px;font-weight:600;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.btn3.show{display:block}
+.pvl{font-size:14px;color:var(--ink-2);font-weight:500;margin:12px 0 8px}
 .sheet-a .sb{min-height:var(--h);font-size:16px}
 .alert{border-radius:var(--rs);padding:12px 14px;margin-bottom:12px;font-size:14px}
 .alert b{display:block;font-size:15px;margin-bottom:4px}
@@ -216,6 +219,7 @@ input.bad{border-color:var(--bad)}
     <button class="sb" id="subBtn" onclick="sub()">작업 보고 제출</button>
     <div class="done" id="done">
       <div class="done-h" id="done-h"></div>
+      <div class="pvl">카톡 보고 문구</div>
       <div class="pvb" id="pv"></div>
       <button class="btn2" id="copy-report-btn" onclick="copyReport()">보고 문구 복사</button>
     </div>
@@ -246,6 +250,7 @@ input.bad{border-color:var(--bad)}
   <div class="sheet-s" id="sheet-s"></div>
   <div class="sheet-b" id="sheet-b"></div>
   <div class="sheet-a"><button class="btn2" id="sheet-no">취소</button><button class="sb" id="sheet-ok">제출</button></div>
+  <button class="btn3" id="sheet-alt"></button>
 </div></div>
 
 <script>
@@ -295,13 +300,18 @@ function cwd(){
 }
 
 // ── 확인 시트 ──
-function ask({title,sub='',body='',ok='제출',cancel='취소'}){
+function ask({title,sub='',body='',ok='제출',cancel='취소',alt=''}){
   return new Promise(res=>{
     $('sheet-t').textContent=title;$('sheet-s').textContent=sub;$('sheet-s').style.display=sub?'block':'none';
-    $('sheet-b').innerHTML=body;$('sheet-ok').textContent=ok;$('sheet-no').textContent=cancel;
+    $('sheet-b').innerHTML=body;$('sheet-ok').textContent=ok;$('sheet-no').textContent=cancel||'';
+    // cancel 없이 부르면 확인 버튼 하나만
+    $('sheet-no').style.display=cancel?'':'none';
+    document.querySelector('.sheet-a').style.gridTemplateColumns=cancel?'':'1fr';
+    $('sheet-alt').textContent=alt;$('sheet-alt').classList.toggle('show',!!alt);
     $('dim').classList.add('show');
-    const done=v=>{$('dim').classList.remove('show');$('sheet-ok').onclick=$('sheet-no').onclick=$('dim').onclick=null;res(v);};
+    const done=v=>{$('dim').classList.remove('show');$('sheet-ok').onclick=$('sheet-no').onclick=$('sheet-alt').onclick=$('dim').onclick=null;res(v);};
     $('sheet-ok').onclick=()=>done(true);
+    $('sheet-alt').onclick=()=>done('alt');
     $('sheet-no').onclick=()=>done(false);
     $('dim').onclick=e=>{if(e.target===$('dim'))done(false);};
     setTimeout(()=>$('sheet-ok').focus(),50);
@@ -491,14 +501,27 @@ async function sub(){
   try{
     let res=await post({...d,v:2});
     if(res.status==='confirm'){
-      let body='';
-      if(res.duplicates.length)body+=`<div class="alert bad"><b>이미 입력된 차량 — 빼고 저장합니다</b><ul class="plist">${res.duplicates.map(x=>`<li><span class="p">${esc(x.plate)}</span><span class="m">${esc(x.service)}</span></li>`).join('')}</ul></div>`;
-      if(res.asks.length)body+=`<div class="alert warn"><b>다시 확인해주세요 — 맞으면 함께 저장합니다</b><ul class="plist">${res.asks.map(x=>`<li><span class="p">${esc(x.plate)}</span><span class="m">${esc(x.reason)}</span></li>`).join('')}</ul></div>`;
-      if(!await ask({title:'확인이 필요합니다',body,ok:'계속 저장'})){tst('제출을 취소했습니다','err');return;}
-      res=await post({...d,v:2,confirmed:true});
+      // 시트에 들어갈 줄 수 (테슬라는 세차·광택이 각각 한 줄)
+      const lines=d.cars.reduce((n,c)=>n+(CO[d.company].t==='tesla'?(c.hasWash!==false?1:0)+(c.hasPolish&&c.panels>0?1:0):1),0);
+      const dupList=`<ul class="plist">${res.duplicates.map(x=>`<li><span class="p">${esc(x.plate)}</span><span class="m">${esc(x.service)}</span></li>`).join('')}</ul>`;
+      let force=false;
+      if(!res.asks.length&&res.duplicates.length>=lines){
+        const r=await ask({title:'이미 입력된 차량입니다',sub:'같은 날 같은 작업이 시트에 이미 있습니다',body:dupList,ok:'닫기',cancel:null,alt:'같은 날 두 번 작업했으면 그래도 저장'});
+        if(r!=='alt'){$('done').classList.remove('show');resetCars();clearDraft();tst('저장하지 않았습니다');return;}
+        force=true;
+      }else{
+        let body='';
+        if(res.duplicates.length)body+=`<div class="alert bad"><b>이미 입력된 차량</b>${dupList}</div>`;
+        if(res.asks.length)body+=`<div class="alert warn"><b>다시 확인해주세요 — 맞으면 함께 저장합니다</b><ul class="plist">${res.asks.map(x=>`<li><span class="p">${esc(x.plate)}</span><span class="m">${esc(x.reason)}</span></li>`).join('')}</ul></div>`;
+        const r=await ask({title:'확인이 필요합니다',body,ok:res.duplicates.length?'중복 빼고 저장':'저장',alt:res.duplicates.length?'중복도 그대로 저장':''});
+        if(!r){tst('제출을 취소했습니다','err');return;}
+        force=r==='alt';
+      }
+      res=await post({...d,v:2,confirmed:true,force});
     }
     if(res.status!=='ok')throw new Error(res.message||'저장 실패');
 
+    if(!res.saved){$('done').classList.remove('show');tst('저장된 차량이 없습니다','err');resetCars();clearDraft();return;}
     const skip={};(res.skipped||[]).forEach(x=>skip[x.plate]=1);
     $('pv').textContent=bpv({...d,cars:d.cars.filter(c=>!skip[c.plate]||c.hasPolish).map(c=>skip[c.plate]?{...c,hasWash:false}:c)});
     $('done-h').textContent=`${res.saved}건 저장했습니다${res.skipped&&res.skipped.length?` (중복 ${res.skipped.length}건 제외)`:''}`;
