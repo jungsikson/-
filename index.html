@@ -375,7 +375,7 @@ function ac(){
   const mo='<option value="">선택</option>'+CO[SC].m.map(m=>`<option>${m}</option>`).join('');
   const noteHTML=`<div class="note-row"><label for="nt${i}">특이사항 (선택)</label><textarea id="nt${i}" placeholder="예) 정산 제외, 클레임" rows="2"></textarea></div>`;
   const mlab=`<label for="mo${i}" class="ml">차종 <span class="src" id="ms${i}"></span></label>`;
-  const modelSel=isHD?`<div>${mlab}<input type="text" id="mo${i}" placeholder="번호 입력 시 원부로 채워짐" autocomplete="off" oninput="mchg(${i})"></div>`:`<div>${mlab}<select id="mo${i}" onchange="mchg(${i})">${mo}</select></div>`;
+  const modelSel=isHD?`<div>${mlab}<input type="text" id="mo${i}" placeholder="차종 직접 입력" autocomplete="off" oninput="mchg(${i})"></div>`:`<div>${mlab}<select id="mo${i}" onchange="mchg(${i})">${mo}</select></div>`;
   const sh=isHD ? noteHTML
     : iT ? `<div class="pr"><span class="pl">세차</span><label class="tw" aria-label="세차"><input type="checkbox" id="ws${i}" checked><span class="ts"></span></label></div>
       <div class="pr"><span class="pl">광택</span><label class="tw" aria-label="광택"><input type="checkbox" onchange="tp(this,${i})"><span class="ts"></span></label></div>
@@ -421,35 +421,36 @@ async function lookup(i){
   const wi=$(`wi${i}`);
   if(!plate){wi.textContent='';wi.className='wi';setSrc(i);return;}
   if(!PLATE_RE.test(plate)){
-    if(!plateStrict()){wi.textContent='번호판 형식이 아닙니다. 번호판 없는 차(전시차·신차)면 차종을 직접 골라주세요';wi.className='wi fail';st.src='직접';setSrc(i);}
+    if(!plateStrict()){wi.textContent='번호판 없는 차(전시차·신차) — 차종을 직접 입력해주세요';wi.className='wi fail';st.src='직접';setSrc(i);}
     return;
   }
-  wi.textContent='원부 조회 중...';wi.className='wi';st.busy=true;
+  wi.textContent='원부 조회 중...';wi.className='wi';st.busy=true;setSrc(i);
   let res=WC[plate];
   if(!res){
     try{
-      const ctl=new AbortController();const to=setTimeout(()=>ctl.abort(),12000);
+      const ctl=new AbortController();const to=setTimeout(()=>ctl.abort(),6000);
       const r=await fetch(`${WONBU_RELAY}?plate=${encodeURIComponent(plate)}`,{signal:ctl.signal});clearTimeout(to);
       res=await r.json();
-    }catch(e){res={status:'fail',reason:'원부조회 연결 실패'};}
+    }catch(e){res={status:'fail',reason:e&&e.name==='AbortError'?'응답 없음':'연결 실패'};}
     if(res.status==='ok')WC[plate]=res;
   }
   st.busy=false;
   if($(`pl${i}`)?.value.trim()!==plate)return; // 그 사이 번호가 바뀜
   st.res=res;
   if(res.status!=='ok'){
-    wi.innerHTML=`원부조회 안 됨 (${esc(res.reason||'오류')}) — 번호가 맞는지 보고, 차종을 직접 넣어주세요`;wi.className='wi fail';
+    wi.innerHTML=`원부조회 실패 (${esc(res.reason||'오류')}) — 차종을 직접 입력해주세요`;wi.className='wi fail';
     st.src='직접';setSrc(i);return;
   }
   st.wiHtml=`원부 · <b>${esc(res.model)}</b> · ${esc(res.year||'')} · ${esc(res.color||'')}`;wi.innerHTML=st.wiHtml;wi.className='wi ok';
   st.auto=autoVal(res);
   const mo=$(`mo${i}`);
   // 비어 있거나 직접 고친 적 없으면 원부 값으로 채운다
+  if(st.open&&mo.value&&st.src==='직접')st.src='수정'; // 기다리지 않고 직접 고른 값은 지킨다
   if(st.auto&&(!mo.value||st.src!=='수정')){
     if(mo.tagName==='SELECT'&&![...mo.options].some(o=>o.value===st.auto)){st.auto='';}
     else mo.value=st.auto;
   }
-  if(!st.auto){st.wiHtml+=' — 차종을 직접 골라주세요';wi.innerHTML=st.wiHtml;st.src='직접';}
+  if(!st.auto){st.wiHtml+=' — 차종을 직접 입력해주세요';wi.innerHTML=st.wiHtml;st.src='직접';}
   else{
     if(CO[SC].t!=='heydealer'){st.wiHtml+=` → 차종 <b>${esc(st.auto)}</b>`;wi.innerHTML=st.wiHtml;}
     st.src=mo.value===st.auto?'원부':'수정';
@@ -475,7 +476,7 @@ function setSrc(i){
   const plate=$(`pl${i}`)?.value.trim();
   const open=!!plate&&(st.open||st.src==='직접'||st.src==='수정');
   $(`mf${i}`)?.classList.toggle('show',open);
-  $(`mt${i}`)?.classList.toggle('show',!!plate&&!open&&st.src==='원부');
+  $(`mt${i}`)?.classList.toggle('show',!!plate&&!open&&(st.src==='원부'||st.busy));
   // 원부와 다르게 고쳤으면 안내 줄에 무엇을 무엇으로 고쳤는지
   const wi=$(`wi${i}`);
   if(wi&&st.wiHtml)wi.innerHTML=st.wiHtml+(st.src==='수정'?` <span class="wx">— 원부는 ${esc(st.auto)}, 입력은 ${esc(mo.value)}</span>`:'');
@@ -612,7 +613,8 @@ function carDesc0(co,c){
 }
 
 async function sub(){
-  if(Object.values(WS).some(w=>w.busy)){tst('원부 조회 중입니다. 잠시 후 다시 눌러주세요','err');return;}
+  const waiting=Object.keys(WS).filter(k=>WS[k].busy&&$(`mo${k}`)&&!$(`mo${k}`).value);
+  if(waiting.length){waiting.forEach(k=>openModel(k));tst('원부 조회 중입니다. 잠깐 기다리거나 차종을 직접 입력해주세요','err');return;}
   const d=col();
   if(!d.detailer){tst('이름을 입력해주세요','err');$('det').focus();return;}
   if(!d.company){tst('업체를 선택해주세요','err');return;}
