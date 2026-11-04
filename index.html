@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#FFFFFF">
 <title>카라멜 작업 보고</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
 <style>
 :root{
   --orange:#FE5B1B;--orange-soft:#FFE9DF;
@@ -192,6 +193,20 @@ select.edited,input.edited{border-color:var(--orange);box-shadow:0 0 0 1px var(-
 .qline .nt{display:block;color:var(--warn);font-size:13px}
 .empty{text-align:center;color:var(--ink-2);padding:28px 16px;font-size:15px}
 
+.gate{display:none;min-height:100vh;align-items:center;justify-content:center;padding:24px 16px}
+.gate.show{display:flex}
+.gate-c{width:100%;max-width:400px;background:var(--bg);border:1px solid var(--gray-15);border-radius:16px;padding:28px 20px;text-align:center}
+.gate-c .mark{margin:0 auto 14px;width:40px;height:40px;font-size:20px;border-radius:10px}
+.gate-c h1{font-size:21px;margin-bottom:6px}
+.gate-c p{font-size:15px;color:var(--ink-2);margin-bottom:20px}
+.gate-c .gerr{color:var(--bad);font-weight:600;margin:-8px 0 16px;display:none}
+.gate-c .gerr.show{display:block}
+.gbtn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:52px;background:var(--bg);border:1px solid var(--gray-30);border-radius:var(--r);font-size:16px;font-weight:700;cursor:pointer}
+.gbtn:active{background:var(--gray-08)}
+.acct{max-width:640px;margin:4px auto 0;padding:0 16px;font-size:13px;color:var(--ink-2);text-align:center}
+.acct button{background:none;border:none;color:var(--ink-2);font-size:13px;text-decoration:underline;cursor:pointer;padding:8px}
+.app{display:none}
+.app.show{display:block}
 @keyframes si{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 @keyframes up{from{transform:translateY(40px);opacity:.6}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
@@ -199,6 +214,14 @@ select.edited,input.edited{border-color:var(--orange);box-shadow:0 0 0 1px var(-
 </style>
 </head>
 <body>
+<div class="gate" id="gate"><div class="gate-c">
+  <div class="mark" aria-hidden="true">C</div>
+  <h1>작업 보고</h1>
+  <p>회사 구글 계정(@thetrive.com)으로<br>로그인해주세요</p>
+  <div class="gerr" id="gerr"></div>
+  <button class="gbtn" onclick="signIn()"><svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>회사 구글 계정으로 로그인</button>
+</div></div>
+<div class="app" id="app">
 <header class="hdr" id="app-root">
   <div class="hdr-in">
     <div class="mark" aria-hidden="true">C</div>
@@ -265,6 +288,8 @@ select.edited,input.edited{border-color:var(--orange);box-shadow:0 0 0 1px var(-
   </div>
 </main>
 
+<div class="acct" id="acct"></div>
+</div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="dim" id="dim"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-t">
   <div class="sheet-t" id="sheet-t"></div>
@@ -284,9 +309,10 @@ async function api(qs,body){
   const opt=body?{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)}:{};
   try{
     const ctl=new AbortController();const to=setTimeout(()=>ctl.abort(),20000);
-    const r=await fetch(API_URL+(qs?'?'+qs:''),{...opt,signal:ctl.signal});clearTimeout(to);
+    const r=await fetch(API_URL+(qs?'?'+qs:''),{...opt,headers:{...(opt.headers||{}),Authorization:'Bearer '+await token()},signal:ctl.signal});clearTimeout(to);
     const j=await r.json();
     if(r.ok)return j;
+    if(r.status===401){showGate('로그인이 끝났습니다. 다시 로그인해주세요');return {status:'error',message:'다시 로그인해주세요'};}
     // 검사 결과(오류 문구)는 그대로, 서버 자체 오류만 플랜 B로
     if(j&&j.status==='error'&&r.status<500)return j;
   }catch(e){}
@@ -325,8 +351,44 @@ const $=id=>document.getElementById(id);
   const pr=$('page-report');
   pr.addEventListener('input',save);
   pr.addEventListener('change',save);
-  setTimeout(restore,100);
+  setTimeout(initAuth,0); // 아래 로그인 준비(SB)가 끝난 뒤에
 })();
+
+// ── 회사 구글 계정 로그인 ──
+// 카톡 안 브라우저에서는 구글이 로그인을 막으므로 바깥 브라우저로 넘긴다
+if(/KAKAOTALK/i.test(navigator.userAgent)){location.href='kakaotalk://web/openExternal?url='+encodeURIComponent(location.href);}
+const SB=window.supabase.createClient('https://tzxsjwkahzosmvmvpxxc.supabase.co','sb_publishable_fmSMAvC9DqvA9EG41fC2HA_Qb_SpMOJ',{auth:{flowType:'pkce',detectSessionInUrl:true,persistSession:true,autoRefreshToken:true}});
+let ME=null,BOOTED=false;
+async function token(){const {data}=await SB.auth.getSession();return data.session?.access_token||'';}
+function isCompany(u){return !!u&&/@thetrive\.com$/i.test(u.email||'');}
+function showGate(msg){
+  $('app').classList.remove('show');$('gate').classList.add('show');
+  $('gerr').textContent=msg||'';$('gerr').classList.toggle('show',!!msg);
+}
+async function enter(u){
+  ME=u;$('gate').classList.remove('show');$('app').classList.add('show');
+  $('acct').innerHTML=`${esc(u.email)} 로그인 · <button onclick="signOut()">로그아웃</button>`;
+  // 이름을 안 써 봤으면 로그인한 계정 이름으로
+  const full=(u.user_metadata?.full_name||u.user_metadata?.name||'').replace(/\s/g,'');
+  if(!$('det').value&&full)$('det').value=full;
+  if(location.search.includes('code=')||location.hash.includes('access_token'))history.replaceState(null,'',location.pathname);
+  if(!BOOTED){BOOTED=true;setTimeout(restore,100);}
+}
+async function initAuth(){
+  SB.auth.onAuthStateChange((ev,s)=>{
+    const u=s?.user;
+    if(u&&isCompany(u))enter(u);
+    else if(u){SB.auth.signOut();showGate(`${u.email}은 회사 계정이 아닙니다. @thetrive.com 계정으로 로그인해주세요`);}
+    else if(ev==='SIGNED_OUT')showGate();
+  });
+  const {data}=await SB.auth.getSession();
+  const u=data.session?.user;
+  if(u&&isCompany(u))enter(u);else if(!u)showGate();
+}
+function signIn(){
+  SB.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+location.pathname,queryParams:{hd:'thetrive.com',prompt:'select_account'}}});
+}
+async function signOut(){await SB.auth.signOut();showGate();}
 
 // 오늘이 아닌 날짜를 고르면 바로 눈에 띄게
 function cwd(){
@@ -429,7 +491,7 @@ async function lookup(i){
   if(!res){
     try{
       const ctl=new AbortController();const to=setTimeout(()=>ctl.abort(),6000);
-      const r=await fetch(`${WONBU_RELAY}?plate=${encodeURIComponent(plate)}`,{signal:ctl.signal});clearTimeout(to);
+      const r=await fetch(`${WONBU_RELAY}?plate=${encodeURIComponent(plate)}`,{headers:{Authorization:'Bearer '+await token()},signal:ctl.signal});clearTimeout(to);
       res=await r.json();
     }catch(e){res={status:'fail',reason:e&&e.name==='AbortError'?'응답 없음':'연결 실패'};}
     if(res.status==='ok')WC[plate]=res;
