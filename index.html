@@ -503,7 +503,7 @@ async function sub(){
     if(res.status==='confirm'){
       // 시트에 들어갈 줄 수 (테슬라는 세차·광택이 각각 한 줄)
       const lines=d.cars.reduce((n,c)=>n+(CO[d.company].t==='tesla'?(c.hasWash!==false?1:0)+(c.hasPolish&&c.panels>0?1:0):1),0);
-      const dupList=`<ul class="plist">${res.duplicates.map(x=>`<li><span class="p">${esc(x.plate)}</span><span class="m">${esc(x.service)}</span></li>`).join('')}</ul>`;
+      const dupList=`<ul class="plist">${res.duplicates.map(x=>`<li><span class="p">${esc(x.plate)}</span><span class="m">${x.existing&&x.existing!==x.service?`이미 ${esc(x.existing)} 입력됨`:esc(x.service)}</span></li>`).join('')}</ul>`;
       let force=false;
       if(!res.asks.length&&res.duplicates.length>=lines){
         const r=await ask({title:'이미 입력된 차량입니다',sub:'같은 날 같은 작업이 시트에 이미 있습니다',body:dupList,ok:'닫기',cancel:null,alt:'같은 날 두 번 작업했으면 그래도 저장'});
@@ -522,9 +522,10 @@ async function sub(){
     if(res.status!=='ok')throw new Error(res.message||'저장 실패');
 
     if(!res.saved){$('done').classList.remove('show');tst('저장된 차량이 없습니다','err');resetCars();clearDraft();return;}
-    const skip={};(res.skipped||[]).forEach(x=>skip[x.plate]=1);
-    $('pv').textContent=bpv({...d,cars:d.cars.filter(c=>!skip[c.plate]||c.hasPolish).map(c=>skip[c.plate]?{...c,hasWash:false}:c)});
-    $('done-h').textContent=`${res.saved}건 저장했습니다${res.skipped&&res.skipped.length?` (중복 ${res.skipped.length}건 제외)`:''}`;
+    // 카톡 보고는 이번 제출분이 아니라 시트에 들어 있는 그날 내 작업 전체로
+    const dayCars=res.day?dayToCars(d.company,res.day):d.cars;
+    $('pv').textContent=bpv({...d,cars:dayCars});
+    $('done-h').textContent=`${res.saved}건 저장했습니다${res.skipped&&res.skipped.length?` (중복 ${res.skipped.length}건 제외)`:''} · ${fd(d.date)} 총 ${dayCars.length}대`;
     $('done').classList.add('show');
     tst(`${res.saved}건 저장했습니다`);
     resetCars();clearDraft();
@@ -533,6 +534,18 @@ async function sub(){
   }finally{
     btn.disabled=false;btn.textContent='작업 보고 제출';
   }
+}
+// 시트 행 → 보고 문구용 차량 목록 (테슬라는 세차·광택 두 줄을 한 차로 묶는다)
+function dayToCars(co,rows){
+  if(CO[co].t!=='tesla')return rows.map(r=>({plate:r.plate,model:r.model,service:r.service,note:r.note}));
+  const by={},out=[];
+  rows.forEach(r=>{
+    let c=by[r.plate];
+    if(!c){c=by[r.plate]={plate:r.plate,model:r.model,hasWash:false,hasPolish:false,parts:'',panels:0,note:''};out.push(c);}
+    if(r.service==='광택'){c.hasPolish=true;c.panels+=r.panels;c.parts=[c.parts,r.parts].filter(Boolean).join(',');}
+    else{c.hasWash=true;if(r.note)c.note=r.note;}
+  });
+  return out;
 }
 // 결과를 실제로 받아 본다 (text/plain이면 Apps Script가 사전요청 없이 응답)
 async function post(body){
