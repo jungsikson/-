@@ -102,6 +102,10 @@ input.bad{border-color:var(--bad)}
 .src{display:none;font-size:12px;font-weight:600;border-radius:9px;padding:1px 8px;margin-left:auto;white-space:nowrap}
 .ml{white-space:nowrap}
 .wi .wx{color:var(--ink);font-weight:600}
+.mtg{display:none;background:none;border:none;padding:8px 0 0;min-height:36px;color:var(--ink-2);font-size:14px;font-weight:600;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.mtg.show{display:inline-block}
+.mf{display:none;margin-top:10px}
+.mf.show{display:block}
 .src.show{display:inline-block}
 .src.w{background:var(--gray-15);color:var(--ink-2)}
 .src.e{background:var(--orange-soft);color:var(--ink)}
@@ -377,11 +381,10 @@ function ac(){
         <svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 6l4.5 4.5L12.5 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
       <div class="cb">
-        <div class="r2">
-          <div><label for="pl${i}">차량번호</label><input type="text" id="pl${i}" placeholder="예) 03소7917" oninput="this.value=this.value.replace(/\\s/g,'');up(${i})" onblur="vp(${i})" onkeydown="if(event.key===' ')event.preventDefault()" autocomplete="off" autocapitalize="off"><div class="perr" id="pe-${i}"></div></div>
-          ${modelSel}
-        </div>
+        <div><label for="pl${i}">차량번호</label><input type="text" id="pl${i}" placeholder="예) 03소7917" oninput="this.value=this.value.replace(/\\s/g,'');up(${i})" onblur="vp(${i})" onkeydown="if(event.key===' ')event.preventDefault()" autocomplete="off" autocapitalize="off"><div class="perr" id="pe-${i}"></div></div>
         <div class="wi" id="wi${i}"></div>
+        <button class="mtg" id="mt${i}" onclick="openModel(${i})">차종 직접 입력</button>
+        <div class="mf" id="mf${i}">${modelSel}</div>
         ${sh}
       </div>
     </div>`);
@@ -431,8 +434,15 @@ async function lookup(i){
     else mo.value=st.auto;
   }
   if(!st.auto){st.wiHtml+=' — 차종을 직접 골라주세요';wi.innerHTML=st.wiHtml;st.src='직접';}
-  else st.src=mo.value===st.auto?'원부':'수정';
+  else{
+    if(CO[SC].t!=='heydealer'){st.wiHtml+=` → 차종 <b>${esc(st.auto)}</b>`;wi.innerHTML=st.wiHtml;}
+    st.src=mo.value===st.auto?'원부':'수정';
+  }
   setSrc(i);save();
+}
+function openModel(i){
+  const st=WS[i]=WS[i]||{};st.open=true;setSrc(i);
+  setTimeout(()=>$(`mo${i}`)?.focus(),50);
 }
 function mchg(i){
   const st=WS[i]=WS[i]||{};const v=$(`mo${i}`).value;
@@ -445,6 +455,11 @@ function setSrc(i){
   const m=map[st.src];
   el.className='src'+(m?' show '+m[1]:'');el.textContent=m?m[0]:'';
   mo.classList.toggle('edited',st.src==='수정');
+  // 차종 칸은 원부로 채워졌으면 닫아 두고, 직접 입력이 필요하거나 눌렀을 때만 연다
+  const plate=$(`pl${i}`)?.value.trim();
+  const open=!!plate&&(st.open||st.src==='직접'||st.src==='수정');
+  $(`mf${i}`)?.classList.toggle('show',open);
+  $(`mt${i}`)?.classList.toggle('show',!!plate&&!open&&st.src==='원부');
   // 원부와 다르게 고쳤으면 안내 줄에 무엇을 무엇으로 고쳤는지
   const wi=$(`wi${i}`);
   if(wi&&st.wiHtml)wi.innerHTML=st.wiHtml+(st.src==='수정'?` <span class="wx">— 원부는 ${esc(st.auto)}, ${esc(mo.value)}로 고침</span>`:'');
@@ -592,7 +607,11 @@ async function sub(){
     if(missing){tst(`${missing.plate} 서비스를 선택해주세요`,'err');return;}
   }
   const noModel=d.cars.find(c=>!c.model||c.model.trim()==='');
-  if(noModel){tst(`${noModel.plate} 차종을 선택해주세요`,'err');return;}
+  if(noModel){
+    const c=[...document.querySelectorAll('.cc')].find(c=>$(`pl${c.id.slice(2)}`).value.trim()===noModel.plate);
+    if(c){const i=c.id.slice(2);$(`cc${i}`).classList.add('op');openModel(i);}
+    tst(`${noModel.plate} 차종을 골라주세요`,'err');return;
+  }
   if(CO[d.company]?.t==='tesla'){
     const empty=d.cars.find(c=>!c.hasWash&&!c.hasPolish);
     if(empty){tst(`${empty.plate} 세차 또는 광택을 선택해주세요`,'err');return;}
