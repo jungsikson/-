@@ -302,8 +302,7 @@ select.edited,input.edited{border-color:var(--orange);box-shadow:0 0 0 1px var(-
 <script>
 // 원부조회 중계 (오토랩 Supabase). 원부 주소가 브라우저 직접 호출을 막아 둬서 거친다
 const WONBU_RELAY='https://tzxsjwkahzosmvmvpxxc.supabase.co/functions/v1/wonbu-relay';
-const SHEET_URL='https://script.google.com/macros/s/AKfycbx-zVXVpCcv_ZrDKD7IK10raG-YLOdnuFdMdDHJK0EtafpO8jpQ3v5bIpPfD4T5Yq9MDw/exec';
-// 저장·조회는 Supabase API가 먼저, 안 되면 시트 스크립트로 (둘 다 같은 시트에 같은 규칙으로 쓴다)
+// 저장·조회는 Supabase API만 쓴다 (11/6 로그인 없는 옛 시트 스크립트 경로 차단)
 const API_URL='https://tzxsjwkahzosmvmvpxxc.supabase.co/functions/v1/report-api';
 async function api(qs,body){
   const opt=body?{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)}:{};
@@ -313,11 +312,9 @@ async function api(qs,body){
     const j=await r.json();
     if(r.ok)return j;
     if(r.status===401){showGate('로그인이 끝났습니다. 다시 로그인해주세요');return {status:'error',message:'다시 로그인해주세요'};}
-    // 검사 결과(오류 문구)는 그대로, 서버 자체 오류만 플랜 B로
     if(j&&j.status==='error'&&r.status<500)return j;
   }catch(e){}
-  const r=await fetch(SHEET_URL+(qs?'?'+qs:''),opt);
-  return r.json();
+  return {status:'error',message:'저장 서버에 연결되지 않습니다. 잠시 뒤 다시 눌러 주시고, 계속되면 강희준에게 알려주세요'};
 }
 const CO={
   '인천테슬라':{t:'tesla',   m:['모델3','모델Y','모델X','모델S','사이버트럭','테슬라 아님']},
