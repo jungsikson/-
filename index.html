@@ -313,6 +313,7 @@ async function api(qs,body){
     if(r.ok)return j;
     if(r.status===401){showGate('로그인이 끝났습니다. 다시 로그인해주세요');return {status:'error',message:'다시 로그인해주세요'};}
     if(j&&j.status==='error'&&r.status<500)return j;
+    if(j&&j.message)return {status:'error',message:'저장 서버 오류입니다. 이 화면을 캡처해 강희준에게 보내주세요 ('+j.message+')'};
   }catch(e){}
   return {status:'error',message:'저장 서버에 연결되지 않습니다. 잠시 뒤 다시 눌러 주시고, 계속되면 강희준에게 알려주세요'};
 }
