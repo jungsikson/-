@@ -304,7 +304,7 @@ function viewCust(){
   return '<div class="list">'+cs.map(c=>{
     const k=callOf(c.user_id);const rs=resvOf(c.user_id);
     const mv=rs.filter(inPanel);
-    const keep=rs.filter(r=>!inPanel(r)).map(r=>`<div><span>${fmtKst(r.kst)} · ${techLabel(r)}${fcBadge(r)}</span><span class="st ok">그대로${r.lot_check?'':` <button class="linkbtn" data-open="${r.rid}">날씨로 옮기기</button>`}</span></div>`).join('');
+    const keep=rs.filter(r=>!inPanel(r)).map(r=>`<div><span>${fmtKst(r.kst)} · ${techLabel(r)}${fcBadge(r)}</span><span class="st ok">${r.lot_check?'그대로':`<button class="linkbtn" data-open="${r.rid}">추워서 못 하면 옮기기</button>`}</span></div>`).join('');
     const q=custReq(c);const open=mv.filter(r=>!isDone(r)&&!(r.needs_move&&r.moved));
     const links=open.filter(asked).map(r=>moveOf(r.rid).slack_ts).filter(Boolean).map((ts,i,a)=>`<a class="note" href="https://trydrive.slack.com/archives/C0A9F7H5M0E/p${String(ts).replace('.','')}" target="_blank" rel="noopener">슬랙 글${a.length>1?' '+(i+1):''} 보기</a>`).join(' ');
     const called=k.result==='통화함';
@@ -338,7 +338,7 @@ function viewCust(){
         <span class="note">확인되면 아래 ①주차 위치에 고르기. 야외면 운영팀이 주소를 고쳐 다음 날부터 예보 판정에 들어갑니다</span></div>`:''}
       <div class="row"><a class="call" href="tel:${esc(String(c.phone).replace(/-/g,''))}">전화 걸기</a><span class="phone">${esc(c.phone)}</span></div>
       ${mv.length?`<p class="sub">옮길 예약 ${open.length}건 · 10·12·14시로</p><p class="note">[옮길 수 있는 시각 보기]로 빈 칸을 보고 고객과 정합니다. 같은 날 낮을 먼저 권하고, 고객이 원하면 다른 날도 됩니다. 담당은 그대로가 기본이고, 고객이 괜찮다고 하면 같은 팀 다른 담당 칸을 골라도 됩니다.</p>${mv.map(moveCtl).join('')}${req}`:''}
-      ${keep?`<div class="resv"><p class="sub">그대로 두는 예약 ${rs.length-mv.length}건</p>${keep}<p class="note">예보가 '불가'이거나 당일 추워서 못 하면 [날씨로 옮기기]로 옮깁니다</p></div>`:''}
+      ${keep?`<div class="resv"><p class="sub">시간은 괜찮은 예약 ${rs.length-mv.length}건</p><p class="note">이미 10·12·14시라 시간 때문에 옮길 필요는 없습니다. 그 주 예보가 '불가'이거나 당일 추워서 못 하게 되면 그때 [추워서 못 하면 옮기기]로 다른 날을 잡습니다.</p>${keep}</div>`:''}
       <p class="sub">통화 결과</p>
       <div class="seg" role="group" aria-label="통화 결과">${OPT.result.map(o=>`<button data-uid="${c.user_id}" data-res="${esc(o)}" aria-pressed="${k.result===o}">${esc(o)}</button>`).join('')}</div>
       <div class="row">${sel('parking',OPT.parking,k.parking,c.user_id,'①주차 위치')}${sel('indoor_move',OPT.indoor_move,k.indoor_move,c.user_id,'②그날 실내로 옮길 수 있나')}</div>
@@ -416,7 +416,7 @@ function viewGuide(){
   <li><b>차비스 카드는 어디 있고 누가 누르나요?</b> #caramel_팀장에 올라간 글의 스레드에 달립니다. 팀장님이 [실행]을 누르면 바로 옮겨지고, 고객에게 카카오톡 「예약 확정 안내」가 갑니다(컨시어지 고객 제외). 안 누르면 운영팀 승인 시간(12·15·18시)에 운영팀이 처리합니다.</li>
   <li><b>후보는 어떻게 고른 건가요?</b> 그 예약 날짜 6일 전부터 13일 뒤까지(오늘 이후, 3/14까지) 10·12·14시 칸 중, 근무시간 안이고 휴무·차단이 없고 다른 예약과 안 겹치는 칸입니다. 가까운 날부터 보입니다. 위 칸은 같은 담당, 아래 칸은 같은 팀 다른 담당입니다.</li>
   <li><b>담당을 바꿔도 되나요?</b> 고객이 괜찮다고 하면 됩니다. 아래 칸(같은 팀 다른 담당)을 고르면 차비스 글에 "담당 ○○로 변경"이 들어갑니다. 직접 날짜·시각을 고를 때는 '담당 그대로 · 바꿔도 되면 누르기'를 누르면 "같은 팀 다른 담당으로 바꿔도 됨"으로 부탁합니다. 아무것도 안 누르면 담당 그대로만 부탁합니다.</li>
-  <li><b>날씨 때문에 10·12·14시 예약을 옮기려면요?</b> '그대로 두는 예약' 줄의 [날씨로 옮기기]를 누르면 옮기기 칸이 열리고 후보가 나옵니다. 예보가 '불가'인 예약은 칸이 처음부터 열려 있습니다. 순서는 08·16·18시 예약과 같습니다.</li>
+  <li><b>날씨 때문에 10·12·14시 예약을 옮기려면요?</b> '시간은 괜찮은 예약' 줄의 [추워서 못 하면 옮기기]를 누르면 옮기기 칸이 열리고 후보가 나옵니다. 예보가 '불가'인 예약은 칸이 처음부터 열려 있습니다. 순서는 08·16·18시 예약과 같습니다.</li>
   <li><b>후보에 있던 칸인데 차비스가 겹친다고 해요.</b> 그 사이 다른 예약이 들어온 것입니다. 카드에 [안 함]을 누르고 [후보 새로 보기]로 다시 고릅니다.</li>
   <li><b>고객이 좋다고 한 시각에 담당이 이미 다른 예약이 있으면요?</b> 후보에서 고르면 대부분 피할 수 있습니다. 직접 고른 시각이면 차비스 카드에 [겹쳐도 실행]처럼 '그래도 실행' 버튼만 붙습니다. 누르지 말고 [안 함]을 누른 뒤, 고객에게 다시 전화해 다른 시각을 잡고 화면에서 시각과 동의를 다시 누릅니다.</li>
   <li><b>'옮김 완료'는 언제 바뀌나요?</b> 차비스가 옮긴 뒤 다음 예약 정보 갱신 때 바뀝니다(06–22시 30분마다, 최대 30분). 그 전까지는 '차비스에 부탁함'으로 보입니다.</li>
