@@ -204,7 +204,7 @@ function viewCust(){
       <div class="row">${sel('parking',OPT.parking,k.parking,c.user_id,'①주차 위치')}${sel('indoor_move',OPT.indoor_move,k.indoor_move,c.user_id,'②실내로 옮길 수 있나')}</div>
       <div class="row">${sel('alt_intent',altOpts(c),k.alt_intent||(altOpts(c).length===1?'해당 없음':''),c.user_id,'③1주 뒤도 못 할 때 대안')}${sel('sun',OPT.sun,k.sun,c.user_id,'④해 드는 시간(테크니션 확인)')}</div>
       <label class="f">메모<textarea data-uid="${c.user_id}" data-k="memo" rows="1">${esc(k.memo||'')}</textarea></label>
-      <span class="saved" id="s${c.user_id}">${k.updated_at?'저장됨 '+new Date(k.updated_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):''}</span>
+      <span class="saved" id="s${c.user_id}" ${k.updated_at?'':'hidden'}>${k.updated_at?'저장됨 '+new Date(k.updated_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):''}</span>
     </article>`;}).join('')+'</div>';
 }
 
@@ -284,8 +284,8 @@ function viewGuide(){
 
 // ── 저장 ──
 async function saveCall(uid,fields){
-  const el=$('s'+uid);if(el){el.className='saved';el.textContent='저장 중…';}
-  try{const j=await api('saveCall',{user_id:uid,fields});const i=D.calls.findIndex(c=>+c.user_id===+uid);if(i>=0)D.calls[i]=j.row;else D.calls.push(j.row);
+  const el=$('s'+uid);if(el){el.hidden=false;el.className='saved';el.textContent='저장 중…';}
+  try{const j=await api('saveCall',{user_id:uid,fields});const i=D.calls.findIndex(c=>+c.user_id===+uid);if(i>=0)D.calls[i]={...D.calls[i],...j.row};else D.calls.push(j.row);
     if(el)el.textContent='저장됨';renderProg();}
   catch(e){if(el){el.className='saved err';el.textContent='저장 안 됨: '+e.message;}}
 }
