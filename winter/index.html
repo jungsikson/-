@@ -217,7 +217,9 @@ function viewCust(){
     const k=callOf(c.user_id);const rs=resvOf(c.user_id);
     const keep=rs.filter(r=>!r.needs_move).map(r=>`<div><span>${fmtKst(r.kst)} · ${esc(r.tech)}</span><span class="st ok">그대로</span></div>`).join('');
     const mv=rs.filter(r=>r.needs_move);
-    const q=custReq(c);const req=mv.some(r=>!r.moved)?(q.text?`<div class="req" id="q${c.user_id}">${esc(q.text).replace(/\n/g,'<br>')}</div><div class="row"><button class="btn sm" data-copy="${c.user_id}" data-rids="${q.rids.join(',')}">차비스 부탁 글 복사</button><span class="note">#caramel_팀장에서 @차비스 입력 후 붙여넣기. [겹쳐도 실행] 금지</span></div>`:'<p class="note">옮길 예약마다 시각을 고르면 차비스 부탁 글이 한 번에 만들어집니다</p>'):'';
+    const q=custReq(c);const open=mv.filter(r=>!r.moved);const ts=open.map(r=>moveOf(r.rid).slack_ts).find(Boolean);
+    const link=ts?` <a class="note" href="https://trydrive.slack.com/archives/C0A9F7H5M0E/p${String(ts).replace('.','')}" target="_blank" rel="noopener">슬랙에서 보기</a>`:'';
+    const req=open.length?(q.text?`<div class="req" id="q${c.user_id}">${esc(q.text).replace(/\n/g,'<br>')}</div><div class="row"><button class="btn sm" data-ask="${c.user_id}" data-again="${ts?1:0}">${ts?'차비스에게 다시 부탁하기':'차비스에게 부탁하기'}</button>${link}</div><p class="note">누르면 #caramel_팀장에 차비스와 팀장님 태그 글이 올라갑니다. 차비스 카드에서 [실행]을 누르고, [겹쳐도 실행]은 누르지 않습니다</p>`:'<p class="note">옮길 예약마다 시각을 고르면 차비스 부탁 글이 한 번에 만들어집니다</p>'):'';
     return `<article class="card ${k.result==='통화함'?'done':''}" id="c${c.user_id}">
       <div class="chead"><b>${esc(c.name)}</b><span class="tag">${esc(c.ticket)} · ${esc(c.wash_kind)}<br>${esc(c.car_class)} · ${esc(teamLabel(c.team))}</span></div>
       <div class="meta">${esc(c.cars)}<br>${esc(c.building||'건물명 없음')} · 주차 ${esc(c.lot)}</div>
@@ -307,13 +309,13 @@ function bind(){
   v.querySelectorAll('button[data-hour]').forEach(b=>b.onclick=()=>{const rid=+b.dataset.rid;const box=b.closest('.mv');
     const td=box.querySelector('input[data-k="target_date"]').value;
     saveMove(rid,{target_hour:b.dataset.hour,target_date:td,consent_date:moveOf(rid).consent_date||kstToday()});});
-  v.querySelectorAll('button[data-copy]').forEach(b=>b.onclick=async()=>{const uid=+b.dataset.copy;const c=D.customers.find(x=>+x.user_id===uid);const txt=custReq(c).text;
-    const rids=b.dataset.rids.split(',').filter(Boolean);const now=new Date().toISOString();
-    // 복사는 기다리지 않고 1.5초 안에 안 되면 글을 선택해 둔다(일부 앱 안 브라우저는 복사 허락이 오지 않음)
-    const copied=await Promise.race([navigator.clipboard?.writeText(txt).then(()=>true,()=>false)??Promise.resolve(false),new Promise(r=>setTimeout(()=>r(false),1500))]);
-    if(copied)toast('복사했습니다. 슬랙에서 @차비스 입력 후 붙여넣기');
-    else{const r=document.createRange();r.selectNodeContents($('q'+uid));const s=getSelection();s.removeAllRanges();s.addRange(r);toast('글을 길게 눌러 복사해 주세요');}
-    await Promise.all(rids.map(rid=>saveMove(+rid,{requested_at:now},false)));render();});
+  v.querySelectorAll('button[data-ask]').forEach(b=>b.onclick=async()=>{
+    if(b.dataset.again==='1'&&b.dataset.armed!=='1'){b.dataset.armed='1';b.textContent='이미 부탁했습니다. 한 번 더 누르면 새 글을 올립니다';return;}
+    b.disabled=true;b.textContent='올리는 중…';
+    try{const j=await api('requestChavis',{user_id:+b.dataset.ask});
+      for(const rid of j.rids){const i=D.moves.findIndex(m=>+m.rid===+rid);const add={requested_at:new Date().toISOString(),slack_ts:j.ts};if(i>=0)D.moves[i]={...D.moves[i],...add};else D.moves.push({rid,...add});}
+      toast('#caramel_팀장에 올렸습니다. 차비스 카드에서 [실행]을 눌러 주세요');render();}
+    catch(e){b.disabled=false;b.textContent='차비스에게 부탁하기';toast('올리지 못했습니다: '+e.message);}});
   const f=$('stopf');
   if(f)f.onsubmit=async e=>{e.preventDefault();const fd=new FormData(f);const o=Object.fromEntries(fd.entries());
     o.carry=fd.get('carry')==='on';o.rid=o.rid?+o.rid:null;o.car_temp=o.car_temp===''?null:+o.car_temp;o.air_temp=o.air_temp===''?null:+o.air_temp;if(!o.new_date)delete o.new_date;
