@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>동계 야외 고객 관리</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
+<style>
+:root{--bg:#FFFFFF;--surface:#F5F7FA;--line:#EBEDF0;--ink:#2F3238;--ink2:#5B5F66;--meta:#797E85;--accent:#FE5B1B;--accent-soft:#FFE9DF;
+--good:#1B8A4B;--good-soft:#E6F4EC;--warn:#C76A00;--warn-soft:#FBF0E0;--bad:#C0392B;
+--font:"Pretendard","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;color-scheme:light}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:16px;line-height:1.5;word-break:keep-all;overflow-wrap:anywhere;-webkit-text-size-adjust:100%;
+ padding:env(safe-area-inset-top,0px) max(16px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 48px) max(16px,env(safe-area-inset-left,0px))}
+.wrap{max-width:640px;margin:0 auto}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+.gate{padding-top:20vh;display:flex;flex-direction:column;gap:16px}
+.gate h1{font-size:24px;margin:0}
+.gate p{color:var(--ink2);margin:0}
+.err{color:var(--bad);font-size:14px}
+.btn{border:0;border-radius:10px;padding:12px 16px;background:var(--ink);color:#fff;font-weight:600;font-size:16px;min-height:48px}
+.btn.ghost{background:var(--surface);color:var(--ink)}
+.btn.sm{min-height:40px;padding:8px 12px;font-size:14px}
+header.top{position:sticky;top:0;background:var(--bg);z-index:5;padding:14px 0 0}
+.who{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.who h1{font-size:20px;margin:0}
+.who small{color:var(--meta);font-size:13px}
+.who button{border:0;background:none;color:var(--meta);font-size:13px;padding:4px}
+.prog{display:flex;gap:16px;margin:6px 0 10px;font-size:14px;color:var(--ink2);font-variant-numeric:tabular-nums}
+.prog b{color:var(--accent);font-size:16px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tabs button{border:0;background:none;padding:10px 12px;font-size:16px;color:var(--meta);border-bottom:2px solid transparent;white-space:nowrap}
+.tabs button[aria-selected="true"]{color:var(--ink);font-weight:600;border-bottom-color:var(--ink)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 4px}
+.chip{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:6px 12px;font-size:14px;color:var(--ink2)}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
+.list{display:flex;flex-direction:column;gap:12px;margin-top:12px}
+.card{background:var(--surface);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.card.done{opacity:.72}
+.chead{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.chead b{font-size:16px}
+.chead .tag{font-size:13px;color:var(--ink2);text-align:right}
+.meta{font-size:14px;color:var(--ink2)}
+.resv{display:flex;flex-direction:column;gap:4px;font-size:14px;font-variant-numeric:tabular-nums}
+.resv div{display:flex;justify-content:space-between;gap:8px}
+.st{font-size:13px;font-weight:600;white-space:nowrap}
+.st.need{color:var(--warn)} .st.ok{color:var(--good)} .st.req{color:var(--ink2)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px;font-size:14px;min-height:40px}
+.seg button[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--ink2);flex:1 1 140px;min-width:0}
+label.f select,label.f input,label.f textarea{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:10px;font-size:16px;color:var(--ink);width:100%}
+textarea{resize:vertical;min-height:44px}
+.saved{font-size:13px;color:var(--good)}
+.saved.err{color:var(--bad)}
+.call{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;border-radius:10px;padding:10px 14px;background:var(--ink);color:#fff;font-weight:600;min-height:44px;font-size:16px}
+.phone{font-variant-numeric:tabular-nums;color:var(--ink2);font-size:14px;user-select:all}
+.req{background:var(--bg);border-radius:8px;padding:10px;font-size:14px;color:var(--ink);border:1px solid var(--line)}
+.empty{color:var(--meta);padding:24px 0;text-align:center}
+details.guide{margin-top:12px;background:var(--accent-soft);border-radius:12px;padding:12px 14px}
+details.guide summary{font-weight:600;cursor:pointer}
+details.guide ul{margin:8px 0 0;padding-left:18px;font-size:14px;display:flex;flex-direction:column;gap:6px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 20px);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;z-index:20}
+.stopform{display:flex;flex-direction:column;gap:10px}
+.sub{font-weight:600;margin:16px 0 0}
+.note{font-size:13px;color:var(--meta)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <section id="gate" class="gate" hidden>
+    <h1>동계 야외 고객 관리</h1>
+    <p>팀장님용 화면입니다. 회사 구글 계정(@thetrive.com)으로 로그인하면 우리 팀 고객만 보입니다.</p>
+    <button class="btn" id="login">회사 계정으로 로그인</button>
+    <p id="gerr" class="err" hidden></p>
+  </section>
+
+  <section id="app" hidden>
+    <header class="top">
+      <div class="who"><h1 id="title">동계 야외 고객</h1><span><small id="acct"></small> <button id="logout">로그아웃</button></span></div>
+      <div class="prog" id="prog"></div>
+      <div class="tabs" role="tablist">
+        <button role="tab" id="t-cust" aria-selected="true">고객</button>
+        <button role="tab" id="t-move" aria-selected="false">옮길 예약</button>
+        <button role="tab" id="t-stop" aria-selected="false">중단 기록</button>
+        <button role="tab" id="t-guide" aria-selected="false">전화 대본</button>
+      </div>
+    </header>
+    <div class="chips" id="teamchips"></div>
+    <main id="view"></main>
+    <p class="note" id="sync"></p>
+  </section>
+</div>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+const API='https://tzxsjwkahzosmvmvpxxc.supabase.co/functions/v1/winter-outdoor';
+if(/KAKAOTALK/i.test(navigator.userAgent)){location.href='kakaotalk://web/openExternal?url='+encodeURIComponent(location.href);}
+const SB=window.supabase.createClient('https://tzxsjwkahzosmvmvpxxc.supabase.co','sb_publishable_fmSMAvC9DqvA9EG41fC2HA_Qb_SpMOJ',{auth:{flowType:'pkce',detectSessionInUrl:true,persistSession:true,autoRefreshToken:true}});
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const WD='일월화수목금토';
+let D=null, TAB='cust', TEAM='all', BOOTED=false;
+
+function kstToday(){const d=new Date(Date.now()+9*3600e3);return d.toISOString().slice(0,10);}
+function fmtDate(ymd){if(!ymd)return '';const [y,m,d]=ymd.split('-').map(Number);const w=new Date(Date.UTC(y,m-1,d)).getUTCDay();return `${m}/${d}(${WD[w]})`;}
+function fmtKst(k){return `${fmtDate(k.slice(0,10))} ${k.slice(11,13)}시`;}
+function toast(msg){const t=$('toast');t.textContent=msg;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,2200);}
+
+async function token(){const {data}=await SB.auth.getSession();return data.session?.access_token||'';}
+async function api(action,extra={}){
+  const r=await fetch(API,{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+await token()},body:JSON.stringify({action,...extra})});
+  const j=await r.json().catch(()=>({error:'서버 응답을 읽지 못했습니다'}));
+  if(!r.ok||j.error)throw new Error(j.error||('오류 '+r.status));
+  return j;
+}
+
+function showGate(msg){$('app').hidden=true;$('gate').hidden=false;$('gerr').textContent=msg||'';$('gerr').hidden=!msg;}
+$('login').onclick=()=>SB.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+location.pathname,queryParams:{hd:'thetrive.com',prompt:'select_account'}}});
+$('logout').onclick=async()=>{await SB.auth.signOut();showGate();};
+
+async function enter(u){
+  if(location.search.includes('code='))history.replaceState(null,'',location.pathname);
+  if(BOOTED)return;BOOTED=true;
+  $('gate').hidden=true;$('app').hidden=false;$('acct').textContent=u.email;
+  await reload();
+}
+async function reload(){
+  try{D=await api('load');}catch(e){BOOTED=false;showGate(e.message);return;}
+  $('title').textContent=D.me.isAdmin?'동계 야외 고객 (전체)':`${D.me.name} 팀장 · 동계 야외 고객`;
+  const t=D.syncedAt?new Date(D.syncedAt):null;
+  $('sync').textContent=t?`예약 정보는 회사 DB에서 30분마다 새로 받습니다. 마지막: ${t.toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}`:'';
+  render();
+}
+SB.auth.onAuthStateChange((ev,s)=>{const u=s?.user;if(u&&/@thetrive\.com$/i.test(u.email||''))enter(u);else if(u){SB.auth.signOut();showGate(`${u.email}은 회사 계정이 아닙니다`);}else if(ev==='SIGNED_OUT')showGate();});
+(async()=>{const {data}=await SB.auth.getSession();const u=data.session?.user;if(u&&/@thetrive\.com$/i.test(u.email||''))enter(u);else if(!u)showGate();})();
+
+// ── 데이터 묶기 ──
+const callOf=uid=>D.calls.find(c=>+c.user_id===+uid)||{};
+const moveOf=rid=>D.moves.find(m=>+m.rid===+rid)||{};
+function teamLabel(z){return `${z} ${D.leaders[z]||''}`;}
+function inTeam(c){return TEAM==='all'||c.team===TEAM||D.reservations.some(r=>+r.user_id===+c.user_id&&r.team===TEAM);}
+function custList(){
+  const order={'컨시어지 케어':0,'구독':1,'패키지':2,'1회권':3};
+  return D.customers.filter(c=>c.active&&inTeam(c)).sort((a,b)=>(a.team>b.team)-(a.team<b.team)||(b.n_move>0)-(a.n_move>0)||(order[a.ticket]-order[b.ticket])||String(a.first_kst).localeCompare(b.first_kst));
+}
+function resvOf(uid){return D.reservations.filter(r=>+r.user_id===+uid&&r.active).sort((a,b)=>a.kst.localeCompare(b.kst));}
+function moveState(r){if(r.moved)return ['ok','옮김 완료'];const m=moveOf(r.rid);if(m.requested_at)return ['req','차비스에 부탁함'];return ['need','옮길 것'];}
+
+function renderProg(){
+  const cs=custList();const called=cs.filter(c=>callOf(c.user_id).result==='통화함').length;
+  const mv=D.reservations.filter(r=>r.active&&r.needs_move&&(TEAM==='all'||r.team===TEAM||cs.some(c=>+c.user_id===+r.user_id)));
+  const done=mv.filter(r=>r.moved).length;
+  $('prog').innerHTML=`<span>통화 <b>${called}</b>/${cs.length}명</span><span>옮김 <b>${done}</b>/${mv.length}건</span>`;
+}
+function renderChips(){
+  const teams=D.me.teams;const box=$('teamchips');
+  if(teams.length<2){box.innerHTML='';return;}
+  box.innerHTML=['all',...teams].map(z=>`<button class="chip" aria-pressed="${TEAM===z}" data-z="${z}">${z==='all'?'전체':esc(teamLabel(z))}</button>`).join('');
+  box.querySelectorAll('button').forEach(b=>b.onclick=()=>{TEAM=b.dataset.z;render();});
+}
+function render(){
+  ['cust','move','stop','guide'].forEach(t=>$('t-'+t).setAttribute('aria-selected',TAB===t));
+  renderChips();renderProg();
+  const v=$('view');
+  if(TAB==='cust')v.innerHTML=viewCust();
+  else if(TAB==='move')v.innerHTML=viewMove();
+  else if(TAB==='stop')v.innerHTML=viewStop();
+  else v.innerHTML=viewGuide();
+  bind();
+}
+['cust','move','stop','guide'].forEach(t=>$('t-'+t).onclick=()=>{TAB=t;render();window.scrollTo(0,0);});
+
+const OPT={
+  result:['통화함','부재(다시 걸기)','거절','연락 안 됨'],
+  parking:['','지상 야외','지하','필로티','기계식','모름'],
+  sun:['','오전','낮','오후','상시 그늘'],
+  indoor_move:['','가능','불가'],
+};
+function altOpts(c){
+  if(c.ticket==='컨시어지 케어')return ['','탁송 동의','거절'];
+  if(c.ticket==='구독')return ['','와이퍼 직접 이동 가능','거절'];
+  return ['해당 없음'];
+}
+function sel(name,opts,val,uid,label){return `<label class="f">${label}<select data-uid="${uid}" data-k="${name}">${opts.map(o=>`<option value="${esc(o)}" ${o===(val||'')?'selected':''}>${o?esc(o):'선택'}</option>`).join('')}</select></label>`;}
+
+function viewCust(){
+  const cs=custList();if(!cs.length)return '<p class="empty">이 팀의 겨울 야외 예약 고객이 없습니다</p>';
+  return '<div class="list">'+cs.map(c=>{
+    const k=callOf(c.user_id);const rs=resvOf(c.user_id);
+    const resv=rs.map(r=>{const [cls,txt]=r.needs_move?moveState(r):['','' ];return `<div><span>${fmtKst(r.kst)} · ${esc(r.tech)}${r.needs_move&&r.orig_kst!==r.kst?` <span class="meta">(원래 ${fmtKst(r.orig_kst)})</span>`:''}</span>${txt?`<span class="st ${cls}">${txt}</span>`:''}</div>`;}).join('');
+    return `<article class="card ${k.result==='통화함'?'done':''}" id="c${c.user_id}">
+      <div class="chead"><b>${esc(c.name)}</b><span class="tag">${esc(c.ticket)} · ${esc(c.wash_kind)}<br>${esc(c.car_class)} · ${esc(teamLabel(c.team))}</span></div>
+      <div class="meta">${esc(c.cars)}<br>${esc(c.building||'건물명 없음')} · 주차 ${esc(c.lot)}</div>
+      <div class="resv">${resv}</div>
+      <div class="row"><a class="call" href="tel:${esc(String(c.phone).replace(/-/g,''))}">전화 걸기</a><span class="phone">${esc(c.phone)}</span></div>
+      <div class="seg" role="group" aria-label="통화 결과">${OPT.result.map(o=>`<button data-uid="${c.user_id}" data-res="${esc(o)}" aria-pressed="${k.result===o}">${esc(o)}</button>`).join('')}</div>
+      <div class="row">${sel('parking',OPT.parking,k.parking,c.user_id,'①주차 위치')}${sel('indoor_move',OPT.indoor_move,k.indoor_move,c.user_id,'②실내로 옮길 수 있나')}</div>
+      <div class="row">${sel('alt_intent',altOpts(c),k.alt_intent||(altOpts(c).length===1?'해당 없음':''),c.user_id,'③1주 뒤도 못 할 때 대안')}${sel('sun',OPT.sun,k.sun,c.user_id,'④해 드는 시간(테크니션 확인)')}</div>
+      <label class="f">메모<textarea data-uid="${c.user_id}" data-k="memo" rows="1">${esc(k.memo||'')}</textarea></label>
+      <span class="saved" id="s${c.user_id}">${k.updated_at?'저장됨 '+new Date(k.updated_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):''}</span>
+    </article>`;}).join('')+'</div>';
+}
+
+function reqText(r,m){
+  if(!m.target_date||!m.target_hour||!m.consent_date)return '';
+  const tech=m.new_tech?`담당은 ${m.new_tech} 테크니션으로.`:'담당은 그대로.';
+  return `예약 ${r.rid}번을 ${fmtDate(m.target_date)} ${m.target_hour}로 옮겨줘. 지금 일정은 ${fmtKst(r.kst)}, 담당 ${r.tech}. ${tech} 사유: 동계 야외 낮 시간 이동, 고객 동의 ${fmtDate(m.consent_date).replace(/\(.\)/,'')} 전화`;
+}
+function viewMove(){
+  const cs=custList();const ids=new Set(cs.map(c=>+c.user_id));
+  const rs=D.reservations.filter(r=>r.active&&r.needs_move&&(ids.has(+r.user_id)||TEAM==='all'||r.team===TEAM)).sort((a,b)=>(a.moved-b.moved)||a.orig_kst.localeCompare(b.orig_kst));
+  if(!rs.length)return '<p class="empty">옮길 예약이 없습니다</p>';
+  return `<p class="note" style="margin-top:12px">고객이 동의하면 날짜·시각·동의일을 고르고 [부탁 글 복사] → #caramel_팀장에서 @차비스 입력 후 붙여넣기. [겹쳐도 실행]은 누르지 않습니다. 예약이 바뀌면 30분 안에 "옮김 완료"로 바뀝니다.</p><div class="list">`+rs.map(r=>{
+    const c=D.customers.find(x=>+x.user_id===+r.user_id)||{};const m=moveOf(r.rid);const [cls,txt]=moveState(r);
+    const td=m.target_date||r.orig_kst.slice(0,10);const cd=m.consent_date||kstToday();const t=reqText(r,{...m,target_date:td,consent_date:cd});
+    return `<article class="card ${r.moved?'done':''}">
+      <div class="chead"><b>${esc(c.name||'')} · 예약 ${r.rid}</b><span class="st ${cls}">${txt}</span></div>
+      <div class="meta">지금 ${fmtKst(r.kst)} · 담당 ${esc(r.tech)} · ${esc(c.ticket||'')}</div>
+      ${r.moved?'':`<div class="row"><label class="f">옮길 날짜<input type="date" data-rid="${r.rid}" data-k="target_date" value="${esc(td)}"></label><label class="f">고객 동의일<input type="date" data-rid="${r.rid}" data-k="consent_date" value="${esc(cd)}"></label></div>
+      <div class="seg" role="group" aria-label="옮길 시각">${['10시','12시','14시'].map(h=>`<button data-rid="${r.rid}" data-hour="${h}" aria-pressed="${m.target_hour===h}">${h}</button>`).join('')}</div>
+      <label class="f">담당 바꿈 (비우면 그대로)<input data-rid="${r.rid}" data-k="new_tech" value="${esc(m.new_tech||'')}" placeholder="테크니션 이름"></label>
+      ${t?`<div class="req" id="q${r.rid}">${esc(t)}</div><div class="row"><button class="btn sm" data-copy="${r.rid}">부탁 글 복사</button>${m.requested_at?'<span class="note">부탁함 표시됨</span>':''}</div>`:'<p class="note">옮길 시각을 고르면 차비스 부탁 글이 만들어집니다</p>'}`}
+    </article>`;}).join('')+'</div>';
+}
+
+const REASONS=['차 표면 결빙','예보 기온 미달','바닥·보행로 결빙','눈·비','기타'];
+const ACTIONS=['같은 날 낮으로','1주 뒤로','와이퍼','탁송','고객 거절','기타'];
+function viewStop(){
+  const teams=D.me.teams;const cs=custList();
+  const list=D.stops.filter(s=>TEAM==='all'||s.team===TEAM);
+  return `<p class="note" style="margin-top:12px">테크니션이 세차를 멈추면 한 줄 남깁니다. 실내 주차장도 남깁니다. 중단 이유 1순위는 차 표면 결빙(언 물기를 닦으면 스크래치)입니다.</p>
+  <form class="card stopform" id="stopf">
+    <div class="row"><label class="f">날짜<input type="date" name="wash_date" value="${kstToday()}" required></label>
+    <label class="f">팀<select name="team">${teams.map(z=>`<option value="${z}" ${TEAM===z?'selected':''}>${esc(teamLabel(z))}</option>`).join('')}</select></label></div>
+    <div class="row"><label class="f">고객<input name="customer" list="custnames" placeholder="이름"></label><label class="f">예약 번호<input name="rid" inputmode="numeric" placeholder="있으면"></label></div>
+    <datalist id="custnames">${cs.map(c=>`<option value="${esc(c.name)}">`).join('')}</datalist>
+    <div class="row"><label class="f">실내/야외<select name="lot"><option>야외</option><option>실내</option></select></label><label class="f">건물<input name="building"></label></div>
+    <div class="row"><label class="f">차 표면 온도(℃)<input name="car_temp" inputmode="decimal"></label><label class="f">기온(℃)<input name="air_temp" inputmode="decimal"></label></div>
+    <label class="f">중단 이유<select name="reason" required>${REASONS.map(o=>`<option>${o}</option>`).join('')}</select></label>
+    <div class="row"><label class="f">처리<select name="action">${ACTIONS.map(o=>`<option>${o}</option>`).join('')}</select></label><label class="f">다시 잡은 날짜<input type="date" name="new_date"></label></div>
+    <div class="row"><label class="f">테크니션<input name="tech"></label><label class="f" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" name="carry" style="width:auto"> 세차권 이월</label></div>
+    <label class="f">메모<textarea name="memo" rows="1"></textarea></label>
+    <button class="btn" type="submit">중단 기록 남기기</button>
+  </form>
+  <p class="sub">남긴 기록 ${list.length}건</p>
+  <div class="list">${list.map(s=>{const n=D.stops.filter(x=>x.customer&&x.customer===s.customer).length;return `<div class="card">
+    <div class="chead"><b>${fmtDate(s.wash_date)} · ${esc(s.customer||'고객 미입력')}</b><span class="tag">${esc(s.lot)} · ${esc(teamLabel(s.team))}</span></div>
+    <div class="meta">${esc(s.reason)} · 차 표면 ${s.car_temp??'-'}℃ · 기온 ${s.air_temp??'-'}℃<br>처리 ${esc(s.action)}${s.new_date?` → ${fmtDate(s.new_date)}`:''}${s.carry?' · 세차권 이월':''}${s.tech?` · ${esc(s.tech)}`:''}</div>
+    ${n>=2?`<div class="st need">이 고객 ${n}번째 중단 → 야외처럼 10·12·14시로 잡도록 운영에 알림</div>`:''}
+    ${s.memo?`<div class="meta">${esc(s.memo)}</div>`:''}
+    <div><button class="btn ghost sm" data-del="${s.id}">지우기</button></div></div>`;}).join('')}</div>`;
+}
+
+function viewGuide(){
+  return `<details class="guide" open><summary>원칙</summary><ul>
+  <li>12/1–2/28 야외 주차 세차는 10·12·14시 시작으로만 진행</li>
+  <li>"겨울엔 밖에서 세차 안 해요"로 끝내지 않기. 항상 다른 날짜 제안</li>
+  <li>날씨와 상관없이 다 된다고 약속하지 않기</li>
+  <li>안 받으면 1시간 뒤 한 번 더 → 그래도 안 되면 "전화드렸는데 연결이 안 돼서요, 편하실 때 연락 주세요" 문자</li></ul></details>
+  <details class="guide"><summary>첫 전화 (11/30까지)</summary><ul>
+  <li>"안녕하세요, 카라멜 ○○팀 팀장 ○○○입니다. 겨울 세차 일정 때문에 연락드렸어요."</li>
+  <li>이유: "겨울에는 차 표면에 물이 얼면 닦아낼 수 없고, 억지로 닦으면 스크래치가 생겨요. 그래서 12월부터 2월까지 야외 세차는 낮 10시, 12시, 2시에만 시작해요."</li>
+  <li>08·16·18시 예약: "○일 ○시 예약을 같은 날 낮 ○시로 옮겨 드리려고 하는데 괜찮으실까요?"</li>
+  <li>10·12·14시 예약: "지금 잡힌 시간은 그대로 진행해요."</li>
+  <li>공통: "영하로 내려가거나 눈이 오면 못 할 수 있어요. 그 주 월요일에 미리 연락드리고, 당일에도 다시 연락드릴게요."</li>
+  <li>질문: 주차 위치 / 그날 실내로 옮겨 두실 수 있는지 / 구독 고객은 "1주 뒤에도 못 하면 가까운 실내 베이로 직접 오실 수 있는지", 컨시어지 고객은 "저희가 차를 옮겨 실내에서 해 드려도 되는지"</li>
+  <li>마무리: "바뀐 일정은 카카오톡 「예약 확정 안내」로 바로 받으실 거예요."</li></ul></details>
+  <details class="guide"><summary>월요일 전화</summary><ul>
+  <li>가능: "이번 주 그날은 기온이 괜찮아서 예정대로 진행할게요. 당일에 갑자기 추워지면 아침에 다시 연락드릴게요."</li>
+  <li>애매: "그날 영하 근처라 어려울 수도 있어요. 예약은 그대로 두고 당일 아침에 다시 연락드릴게요."</li>
+  <li>불가: "그날은 영하나 눈 예보가 있어서 다음 주 같은 요일 낮으로 옮겨 드리려고 하는데 괜찮으실까요?"</li></ul></details>
+  <details class="guide"><summary>당일 전화 (못 할 때만)</summary><ul>
+  <li>야외: "오늘 기온이 너무 낮아서 차 표면에 물이 얼어요. 언 물기를 닦으면 스크래치가 생길 수 있어서 오늘은 진행하지 않고, 다음 주 낮 시간으로 다시 잡아 드릴게요."</li>
+  <li>실내: "실내 주차장이지만 오늘은 기온이 낮아서 차 표면에 물이 바로 얼어요. 고객님 차를 위해 오늘은 진행하지 않으려고 해요. 오늘 낮 ○시로 옮기거나 다음 주 같은 요일로 다시 잡아 드릴게요."</li>
+  <li>1주 뒤도 못 하면: 구독 고객은 와이퍼 실내 베이 안내, 컨시어지 고객은 탁송까지(비용 회사 부담) → 운영에 요청</li></ul></details>`;
+}
+
+// ── 저장 ──
+async function saveCall(uid,fields){
+  const el=$('s'+uid);if(el){el.className='saved';el.textContent='저장 중…';}
+  try{const j=await api('saveCall',{user_id:uid,fields});const i=D.calls.findIndex(c=>+c.user_id===+uid);if(i>=0)D.calls[i]=j.row;else D.calls.push(j.row);
+    if(el)el.textContent='저장됨';renderProg();}
+  catch(e){if(el){el.className='saved err';el.textContent='저장 안 됨: '+e.message;}}
+}
+async function saveMove(rid,fields,rerender=true){
+  try{const j=await api('saveMove',{rid,fields});const i=D.moves.findIndex(m=>+m.rid===+rid);const merged={...(i>=0?D.moves[i]:{}),...j.row};if(i>=0)D.moves[i]=merged;else D.moves.push(merged);if(rerender)render();}
+  catch(e){toast('저장 안 됨: '+e.message);}
+}
+function bind(){
+  const v=$('view');
+  v.querySelectorAll('button[data-res]').forEach(b=>b.onclick=()=>{const uid=+b.dataset.uid;const res=b.dataset.res;
+    b.parentElement.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));
+    b.closest('.card').classList.toggle('done',res==='통화함');
+    saveCall(uid,{result:res,called_at:new Date().toISOString()});});
+  v.querySelectorAll('select[data-uid],textarea[data-uid]').forEach(el=>el.onchange=()=>saveCall(+el.dataset.uid,{[el.dataset.k]:el.value}));
+  v.querySelectorAll('input[data-rid]').forEach(el=>el.onchange=()=>saveMove(+el.dataset.rid,{[el.dataset.k]:el.value}));
+  v.querySelectorAll('button[data-hour]').forEach(b=>b.onclick=()=>{const rid=+b.dataset.rid;const card=b.closest('.card');
+    const td=card.querySelector('input[data-k="target_date"]').value, cd=card.querySelector('input[data-k="consent_date"]').value;
+    saveMove(rid,{target_hour:b.dataset.hour,target_date:td,consent_date:cd});});
+  v.querySelectorAll('button[data-copy]').forEach(b=>b.onclick=async()=>{const rid=+b.dataset.copy;const txt=$('q'+rid).textContent;
+    try{await navigator.clipboard.writeText(txt);toast('복사했습니다. 슬랙에서 @차비스 입력 후 붙여넣기');}
+    catch(_){const r=document.createRange();r.selectNodeContents($('q'+rid));const s=getSelection();s.removeAllRanges();s.addRange(r);toast('글을 길게 눌러 복사해 주세요');}
+    saveMove(rid,{requested_at:new Date().toISOString()});});
+  const f=$('stopf');
+  if(f)f.onsubmit=async e=>{e.preventDefault();const fd=new FormData(f);const o=Object.fromEntries(fd.entries());
+    o.carry=fd.get('carry')==='on';o.rid=o.rid?+o.rid:null;o.car_temp=o.car_temp===''?null:+o.car_temp;o.air_temp=o.air_temp===''?null:+o.air_temp;if(!o.new_date)delete o.new_date;
+    try{const j=await api('addStop',{fields:o});D.stops.unshift(j.row);toast('기록했습니다');render();}catch(err){toast('저장 안 됨: '+err.message);}};
+  v.querySelectorAll('button[data-del]').forEach(b=>b.onclick=async()=>{
+    if(b.dataset.armed!=='1'){b.dataset.armed='1';b.textContent='한 번 더 누르면 지웁니다';return;}
+    try{await api('deleteStop',{id:+b.dataset.del});D.stops=D.stops.filter(s=>+s.id!==+b.dataset.del);render();}catch(err){toast(err.message);}});
+}
+</script>
+</body>
+</html>
