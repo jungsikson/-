@@ -48,8 +48,8 @@ header.top{position:sticky;top:0;background:var(--bg);z-index:5;padding:14px 0 0
 .meta{font-size:14px;color:var(--ink2)}
 .resv{display:flex;flex-direction:column;gap:4px;font-size:14px;font-variant-numeric:tabular-nums}
 .resv div{display:flex;justify-content:space-between;gap:8px}
-.st{font-size:13px;font-weight:600;white-space:nowrap}
-.st.need{color:var(--warn)} .st.ok{color:var(--good)} .st.req{color:var(--ink2)}
+.st{font-size:13px;font-weight:600;text-align:right}
+.st.need{color:var(--warn)} .st.ok{color:var(--good)} .st.asked{color:var(--ink2)}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .seg{display:flex;gap:6px;flex-wrap:wrap}
 .seg button{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px;font-size:14px;min-height:40px}
@@ -109,7 +109,7 @@ const SB=window.supabase.createClient('https://tzxsjwkahzosmvmvpxxc.supabase.co'
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const WD='일월화수목금토';
-let D=null, TAB='cust', TEAM='all', BOOTED=false, ONLYMOVE=false;
+let D=null, TAB='cust', TEAM='all', BOOTED=false, ONLYMOVE=false, LOADED=0;
 
 function kstToday(){const d=new Date(Date.now()+9*3600e3);return d.toISOString().slice(0,10);}
 function fmtDate(ymd){if(!ymd)return '';const [y,m,d]=ymd.split('-').map(Number);const w=new Date(Date.UTC(y,m-1,d)).getUTCDay();return `${m}/${d}(${WD[w]})`;}
@@ -134,8 +134,17 @@ async function enter(u){
   $('gate').hidden=true;$('app').hidden=false;$('acct').textContent=u.email;
   await reload();
 }
+// 화면에 돌아올 때·부탁한 뒤에는 서버 기준으로 다시 그린다(다른 기기에서 바꾼 것·옮김 완료가 보이게). 실패하면 알림만
+async function refresh(){
+  try{D=await api('load');LOADED=Date.now();render();}catch(e){toast('새로 불러오지 못했습니다. 신호를 확인해 주세요');}
+}
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState!=='visible'||!D||Date.now()-LOADED<60000)return;
+  if(document.activeElement&&document.activeElement.matches('textarea,input'))return;
+  refresh();
+});
 async function reload(){
-  try{D=await api('load');}catch(e){BOOTED=false;showGate(e.message);return;}
+  try{D=await api('load');LOADED=Date.now();}catch(e){BOOTED=false;showGate(e.message);return;}
   $('title').textContent=D.me.isAdmin?'동계 야외 고객 (전체)':`${D.me.name} 팀장 · 동계 야외 고객`;
   const t=D.syncedAt?new Date(D.syncedAt):null;
   $('sync').textContent=t?`예약 정보는 회사 DB에서 30분마다 새로 받습니다. 마지막: ${t.toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}`:'';
@@ -154,7 +163,23 @@ function custList(){
   return D.customers.filter(c=>c.active&&inTeam(c)).sort((a,b)=>(a.team>b.team)-(a.team<b.team)||(b.n_move>0)-(a.n_move>0)||(order[a.ticket]-order[b.ticket])||String(a.first_kst).localeCompare(b.first_kst));
 }
 function resvOf(uid){return D.reservations.filter(r=>+r.user_id===+uid&&r.active).sort((a,b)=>a.kst.localeCompare(b.kst));}
-function moveState(r){if(r.moved)return ['ok','옮김 완료'];const m=moveOf(r.rid);if(m.requested_at)return ['req','차비스에 부탁함'];return ['need','옮길 것'];}
+// 'YYYY-MM-DD HH' 비교용 (r.kst는 'YYYY-MM-DD HH:mm', 목표 시각은 '10시')
+const slotKey=(ymd,h)=>`${ymd} ${String(parseInt(h,10)).padStart(2,'0')}`;
+// 부탁이 지금 예약·지금 고른 시각과 같은가(아니면 예전 부탁)
+function asked(r){const m=moveOf(r.rid);return !!m.requested_at&&m.req_from_kst===r.kst&&m.req_hour===m.target_hour&&(m.req_date||null)===(m.target_date||null);}
+function moveState(r){
+  const m=moveOf(r.rid);
+  if(r.moved){
+    if(m.req_hour&&slotKey(m.req_date||r.orig_kst.slice(0,10),m.req_hour)!==r.kst.slice(0,13))return ['need','옮겨졌지만 부탁한 시각과 다름'];
+    return ['ok','옮김 완료'];
+  }
+  if(asked(r)){const h=(Date.now()-new Date(m.requested_at).getTime())/3600e3;
+    return h>=3?['need',`부탁 후 ${Math.floor(h)}시간째 그대로 · 슬랙 확인`]:['asked','차비스에 부탁함'];}
+  if(m.requested_at)return ['need','부탁한 뒤 바뀜 · 다시 부탁할 것'];
+  if(m.target_hour&&m.consent_date)return ['need','부탁 전'];
+  if(m.target_hour)return ['need','고객 동의 확인 전'];
+  return ['need','옮길 것'];
+}
 
 function renderProg(){
   const cs=custList();const called=cs.filter(c=>callOf(c.user_id).result==='통화함').length;
@@ -194,22 +219,26 @@ function altOpts(c){
 function sel(name,opts,val,uid,label){return `<label class="f">${label}<select data-uid="${uid}" data-k="${name}">${opts.map(o=>`<option value="${esc(o)}" ${o===(val||'')?'selected':''}>${o?esc(o):'선택'}</option>`).join('')}</select></label>`;}
 
 function moveCtl(r){
-  if(r.moved)return `<div class="mv"><span>${fmtKst(r.orig_kst)} → ${fmtKst(r.kst)} · ${esc(r.tech)}</span><span class="st ok">옮김 완료</span></div>`;
+  if(r.moved){const [cls,txt]=moveState(r);return `<div class="mv"><div class="mvh"><span>${fmtKst(r.orig_kst)} → ${fmtKst(r.kst)} · ${esc(r.tech)}</span><span class="st ${cls}">${txt}</span></div></div>`;}
   const m=moveOf(r.rid);const [cls,txt]=moveState(r);const td=m.target_date||r.orig_kst.slice(0,10);
+  const con=m.target_hour?`<div class="seg"><button data-consent="${r.rid}" aria-pressed="${!!m.consent_date}">${m.consent_date?`고객 동의함 (${fmtDate(m.consent_date)} 통화)`:'고객이 이 날짜·시각에 동의함'}</button></div>`:'';
   return `<div class="mv" data-mv="${r.rid}">
     <div class="mvh"><span>${fmtKst(r.kst)} · ${esc(r.tech)}</span><span class="st ${cls}">${txt}</span></div>
-    <div class="row"><label class="f">옮길 날짜<input type="date" data-rid="${r.rid}" data-k="target_date" value="${esc(td)}"></label>
+    <div class="row"><label class="f">옮길 날짜<input type="date" data-rid="${r.rid}" data-k="target_date" value="${esc(td)}" min="${kstToday()}" max="2027-02-28"></label>
     <div class="seg" role="group" aria-label="옮길 시각">${['10시','12시','14시'].map(h=>`<button data-rid="${r.rid}" data-hour="${h}" aria-pressed="${m.target_hour===h}">${h}</button>`).join('')}</div></div>
+    ${con}
   </div>`;
 }
+// 부탁할 수 있는 것(시각·동의 있고 아직 안 부탁함), 동의가 빠진 것, 부탁 후 오래 그대로인 것
 function custReq(c){
   const rs=resvOf(c.user_id).filter(r=>r.needs_move&&!r.moved);
-  const lines=rs.map(r=>{const m=moveOf(r.rid);if(!m.target_hour)return null;const td=m.target_date||r.orig_kst.slice(0,10);
-    return `- 예약 ${r.rid}번: ${fmtKst(r.kst)} → ${fmtDate(td)} ${m.target_hour} (담당 ${r.tech} 그대로)`;}).filter(Boolean);
-  if(!lines.length)return {text:'',rids:[]};
-  const cd=(rs.map(r=>moveOf(r.rid).consent_date).find(Boolean))||kstToday();
-  return {text:`${c.name} 고객 예약 ${lines.length}건 옮겨줘. 사유: 동계 야외 낮 시간 이동, 고객 동의 ${fmtDate(cd).replace(/\(.\)/,'')} 전화\n${lines.join('\n')}`,rids:rs.filter(r=>moveOf(r.rid).target_hour).map(r=>r.rid)};
+  const ready=[],missing=[],stale=[];
+  rs.forEach(r=>{const m=moveOf(r.rid);
+    if(asked(r)){if(moveState(r)[0]==='need')stale.push(r);return;}
+    if(m.target_hour&&m.consent_date)ready.push(r);else missing.push(r);});
+  return {ready,missing,stale};
 }
+function reqLine(r){const m=moveOf(r.rid);return `예약 ${r.rid}번 ${fmtKst(r.kst)} → ${fmtDate(m.target_date||r.orig_kst.slice(0,10))} ${m.target_hour}`;}
 function viewCust(){
   let cs=custList();if(ONLYMOVE)cs=cs.filter(c=>resvOf(c.user_id).some(r=>r.needs_move&&!r.moved));
   if(!cs.length)return '<p class="empty">해당하는 고객이 없습니다</p>';
@@ -217,9 +246,20 @@ function viewCust(){
     const k=callOf(c.user_id);const rs=resvOf(c.user_id);
     const keep=rs.filter(r=>!r.needs_move).map(r=>`<div><span>${fmtKst(r.kst)} · ${esc(r.tech)}</span><span class="st ok">그대로</span></div>`).join('');
     const mv=rs.filter(r=>r.needs_move);
-    const q=custReq(c);const open=mv.filter(r=>!r.moved);const ts=open.map(r=>moveOf(r.rid).slack_ts).find(Boolean);
-    const link=ts?` <a class="note" href="https://trydrive.slack.com/archives/C0A9F7H5M0E/p${String(ts).replace('.','')}" target="_blank" rel="noopener">슬랙에서 보기</a>`:'';
-    const req=open.length?(q.text?`<div class="req" id="q${c.user_id}">${esc(q.text).replace(/\n/g,'<br>')}</div><div class="row"><button class="btn sm" data-ask="${c.user_id}" data-again="${ts?1:0}">${ts?'차비스에게 다시 부탁하기':'차비스에게 부탁하기'}</button>${link}</div><p class="note">누르면 #caramel_팀장에 차비스와 팀장님 태그 글이 올라갑니다. 차비스 카드에서 [실행]을 누르고, [겹쳐도 실행]은 누르지 않습니다</p>`:'<p class="note">옮길 예약마다 시각을 고르면 차비스 부탁 글이 한 번에 만들어집니다</p>'):'';
+    const q=custReq(c);const open=mv.filter(r=>!r.moved);
+    const links=open.filter(asked).map(r=>moveOf(r.rid).slack_ts).filter(Boolean).map((ts,i,a)=>`<a class="note" href="https://trydrive.slack.com/archives/C0A9F7H5M0E/p${String(ts).replace('.','')}" target="_blank" rel="noopener">슬랙 글${a.length>1?' '+(i+1):''} 보기</a>`).join(' ');
+    const called=k.result==='통화함';
+    let req='';
+    if(open.length&&!called)req=`<p class="note">통화 결과를 '통화함'으로 남긴 뒤, 예약마다 시각을 고르고 고객 동의를 누르면 차비스 부탁 버튼이 생깁니다</p>`;
+    else if(open.length){
+      if(q.ready.length)req+=`<div class="req">${q.ready.map(r=>esc(reqLine(r))).join('<br>')}</div>
+        <div class="row"><button class="btn sm" data-ask="${c.user_id}">차비스에게 부탁하기 (${q.ready.length}건)</button></div>
+        <p class="note">예약마다 글이 하나씩 #caramel_팀장에 올라갑니다. 차비스 카드에 [실행]이 있으면 누릅니다. [겹쳐도 실행]만 있으면 [안 함]을 누르고 고객과 다른 시각을 다시 잡습니다${q.missing.length?` · 동의를 안 누른 ${q.missing.length}건은 이번에 빠집니다`:''}</p>`;
+      else if(q.missing.length)req+=`<p class="note">예약마다 시각을 고르고 '고객이 이 날짜·시각에 동의함'을 누르면 부탁 버튼이 생깁니다</p>`;
+      if(q.stale.length)req+=`<div class="row"><button class="btn ghost sm" data-ask="${c.user_id}" data-again="1">차비스에게 다시 부탁하기 (${q.stale.length}건)</button></div>`;
+      if(links)req+=`<div class="row">${links}</div>`;
+    }
+    if(open.length&&c.ticket==='컨시어지 케어')req+=`<p class="note">컨시어지 고객은 옮겨도 카카오톡 알림이 가지 않습니다. 통화에서 바뀐 날짜·시각을 직접 확정해 주세요</p>`;
     return `<article class="card ${k.result==='통화함'?'done':''}" id="c${c.user_id}">
       <div class="chead"><b>${esc(c.name)}</b><span class="tag">${esc(c.ticket)} · ${esc(c.wash_kind)}<br>${esc(c.car_class)} · ${esc(teamLabel(c.team))}</span></div>
       <div class="meta">${esc(c.cars)}<br>${esc(c.building||'건물명 없음')} · 주차 ${esc(c.lot)}</div>
@@ -276,7 +316,9 @@ function viewGuide(){
   <li>10·12·14시 예약: "지금 잡힌 시간은 그대로 진행해요."</li>
   <li>공통: "영하로 내려가거나 눈이 오면 못 할 수 있어요. 그 주 월요일에 미리 연락드리고, 당일에도 다시 연락드릴게요."</li>
   <li>질문: 주차 위치 / 그날 실내로 옮겨 두실 수 있는지 / 구독 고객은 "1주 뒤에도 못 하면 가까운 실내 베이로 직접 오실 수 있는지", 컨시어지 고객은 "저희가 차를 옮겨 실내에서 해 드려도 되는지"</li>
-  <li>마무리: "바뀐 일정은 카카오톡 「예약 확정 안내」로 바로 받으실 거예요."</li></ul></details>
+  <li>마무리: "바뀐 일정은 카카오톡 「예약 확정 안내」로 받으실 거예요."</li>
+  <li>컨시어지 고객 마무리: 카카오톡 알림이 가지 않으니 "○일 ○시로 확정해 두겠습니다"로 통화에서 직접 확정</li>
+  <li>통화가 끝나면 화면에서 통화 결과 → 시각 → '고객이 이 날짜·시각에 동의함' 순서로 누름</li></ul></details>
   <details class="guide"><summary>월요일 전화</summary><ul>
   <li>가능: "이번 주 그날은 기온이 괜찮아서 예정대로 진행할게요. 당일에 갑자기 추워지면 아침에 다시 연락드릴게요."</li>
   <li>애매: "그날 영하 근처라 어려울 수도 있어요. 예약은 그대로 두고 당일 아침에 다시 연락드릴게요."</li>
@@ -291,8 +333,8 @@ function viewGuide(){
 async function saveCall(uid,fields){
   const el=$('s'+uid);if(el){el.hidden=false;el.className='saved';el.textContent='저장 중…';}
   try{const j=await api('saveCall',{user_id:uid,fields});const i=D.calls.findIndex(c=>+c.user_id===+uid);if(i>=0)D.calls[i]={...D.calls[i],...j.row};else D.calls.push(j.row);
-    if(el)el.textContent='저장됨';renderProg();}
-  catch(e){if(el){el.className='saved err';el.textContent='저장 안 됨: '+e.message;}}
+    if(el)el.textContent='저장됨';renderProg();return true;}
+  catch(e){if(el){el.className='saved err';el.textContent='저장 안 됨: '+e.message;}toast('저장 안 됨. 다시 눌러 주세요');return false;}
 }
 async function saveMove(rid,fields,rerender=true){
   try{const j=await api('saveMove',{rid,fields});const i=D.moves.findIndex(m=>+m.rid===+rid);const merged={...(i>=0?D.moves[i]:{}),...j.row};if(i>=0)D.moves[i]=merged;else D.moves.push(merged);if(rerender)render();}
@@ -300,22 +342,28 @@ async function saveMove(rid,fields,rerender=true){
 }
 function bind(){
   const v=$('view');
-  v.querySelectorAll('button[data-res]').forEach(b=>b.onclick=()=>{const uid=+b.dataset.uid;const res=b.dataset.res;
-    b.parentElement.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));
-    b.closest('.card').classList.toggle('done',res==='통화함');
-    saveCall(uid,{result:res,called_at:new Date().toISOString()});});
+  v.querySelectorAll('button[data-res]').forEach(b=>b.onclick=async()=>{const uid=+b.dataset.uid;const res=b.dataset.res;
+    const grp=[...b.parentElement.querySelectorAll('button')];const before=grp.map(x=>x.getAttribute('aria-pressed'));const card=b.closest('.card');const wasDone=card.classList.contains('done');
+    grp.forEach(x=>x.setAttribute('aria-pressed',x===b));card.classList.toggle('done',res==='통화함');
+    if(await saveCall(uid,{result:res,called_at:new Date().toISOString()}))render();
+    else{grp.forEach((x,i)=>x.setAttribute('aria-pressed',before[i]));card.classList.toggle('done',wasDone);}});
   v.querySelectorAll('select[data-uid],textarea[data-uid]').forEach(el=>el.onchange=()=>saveCall(+el.dataset.uid,{[el.dataset.k]:el.value}));
   v.querySelectorAll('input[data-rid]').forEach(el=>el.onchange=()=>saveMove(+el.dataset.rid,{[el.dataset.k]:el.value}));
+  // 시각을 고르는 것과 고객 동의는 따로 누른다(날짜·시각을 바꾸면 서버가 동의를 지운다)
   v.querySelectorAll('button[data-hour]').forEach(b=>b.onclick=()=>{const rid=+b.dataset.rid;const box=b.closest('.mv');
     const td=box.querySelector('input[data-k="target_date"]').value;
-    saveMove(rid,{target_hour:b.dataset.hour,target_date:td,consent_date:moveOf(rid).consent_date||kstToday()});});
+    saveMove(rid,{target_hour:b.dataset.hour,target_date:td});});
+  v.querySelectorAll('button[data-consent]').forEach(b=>b.onclick=()=>{const rid=+b.dataset.consent;
+    saveMove(rid,{consent:b.getAttribute('aria-pressed')!=='true'});});
   v.querySelectorAll('button[data-ask]').forEach(b=>b.onclick=async()=>{
-    if(b.dataset.again==='1'&&b.dataset.armed!=='1'){b.dataset.armed='1';b.textContent='이미 부탁했습니다. 한 번 더 누르면 새 글을 올립니다';return;}
+    const again=b.dataset.again==='1';
+    if(again&&b.dataset.armed!=='1'){b.dataset.armed='1';b.textContent='한 번 더 누르면 새 글을 올립니다';return;}
     b.disabled=true;b.textContent='올리는 중…';
-    try{const j=await api('requestChavis',{user_id:+b.dataset.ask});
-      for(const rid of j.rids){const i=D.moves.findIndex(m=>+m.rid===+rid);const add={requested_at:new Date().toISOString(),slack_ts:j.ts};if(i>=0)D.moves[i]={...D.moves[i],...add};else D.moves.push({rid,...add});}
-      toast('#caramel_팀장에 올렸습니다. 차비스 카드에서 [실행]을 눌러 주세요');render();}
-    catch(e){b.disabled=false;b.textContent='차비스에게 부탁하기';toast('올리지 못했습니다: '+e.message);}});
+    try{const j=await api('requestChavis',{user_id:+b.dataset.ask,again});
+      toast(`#caramel_팀장에 ${j.posted.length}건 올렸습니다${j.skipped.length?` (${j.skipped.length}건 빠짐)`:''}. 차비스 카드를 확인해 주세요`);}
+    catch(e){toast('올리지 못했습니다: '+e.message);}
+    await refresh(); // 응답이 끊겨도 서버에 남은 부탁 기록으로 다시 그린다(중복 부탁은 서버가 막음)
+  });
   const f=$('stopf');
   if(f)f.onsubmit=async e=>{e.preventDefault();const fd=new FormData(f);const o=Object.fromEntries(fd.entries());
     o.carry=fd.get('carry')==='on';o.rid=o.rid?+o.rid:null;o.car_temp=o.car_temp===''?null:+o.car_temp;o.air_temp=o.air_temp===''?null:+o.air_temp;if(!o.new_date)delete o.new_date;
