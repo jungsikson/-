@@ -81,6 +81,7 @@ details.guide ul{margin:8px 0 0;padding-left:18px;font-size:14px;display:flex;fl
   <section id="gate" class="gate" hidden>
     <h1>동계 야외 고객 관리</h1>
     <p>팀장님용 화면입니다. 회사 구글 계정(@thetrive.com)으로 로그인하면 우리 팀 고객만 보입니다.</p>
+    <p class="note">카카오톡·네이버·인스타그램 앱 안에서 열면 구글 로그인이 막힐 수 있습니다. 화면 오른쪽 위(또는 아래) 메뉴에서 '다른 브라우저로 열기'를 눌러 크롬이나 사파리로 열어 주세요.</p>
     <button class="btn" id="login">회사 계정으로 로그인</button>
     <p id="gerr" class="err" hidden></p>
   </section>
@@ -147,7 +148,7 @@ async function reload(){
   try{D=await api('load');LOADED=Date.now();}catch(e){BOOTED=false;showGate(e.message);return;}
   $('title').textContent=D.me.isAdmin?'동계 야외 고객 (전체)':`${D.me.name} 팀장 · 동계 야외 고객`;
   const t=D.syncedAt?new Date(D.syncedAt):null;
-  $('sync').textContent=t?`예약 정보는 회사 DB에서 30분마다 새로 받습니다. 마지막: ${t.toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}`:'';
+  $('sync').textContent=t?`예약 정보는 06–22시에 30분마다 새로 받습니다. 차비스가 예약을 옮긴 뒤 '옮김 완료'로 바뀌기까지 최대 30분 걸립니다. 마지막: ${t.toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}`:'';
   render();
 }
 SB.auth.onAuthStateChange((ev,s)=>{const u=s?.user;if(u&&/@thetrive\.com$/i.test(u.email||''))enter(u);else if(u){SB.auth.signOut();showGate(`${u.email}은 회사 계정이 아닙니다`);}else if(ev==='SIGNED_OUT')showGate();});
@@ -157,6 +158,10 @@ SB.auth.onAuthStateChange((ev,s)=>{const u=s?.user;if(u&&/@thetrive\.com$/i.test
 const callOf=uid=>D.calls.find(c=>+c.user_id===+uid)||{};
 const moveOf=rid=>D.moves.find(m=>+m.rid===+rid)||{};
 function teamLabel(z){return `${z} ${D.leaders[z]||''}`;}
+// 고객은 예약이 가장 많은 팀 하나에 속한다 → 다른 팀 테크니션 담당 예약에는 그 팀을 붙여 보여 준다
+function techLabel(r){const c=D.customers.find(x=>+x.user_id===+r.user_id);return esc(r.tech)+(c&&r.team&&r.team!==c.team?` (${esc(r.team)} 담당)`:'');}
+// 주차 유형이 비어 있지만 테크니션 기록상 야외인 주소
+function lotLabel(l){return l==='빈칸(기록상 야외)'?'정보 없음 · 테크니션 기록상 야외':l;}
 function inTeam(c){return TEAM==='all'||c.team===TEAM;}
 function custList(){
   const order={'컨시어지 케어':0,'구독':1,'패키지':2,'1회권':3};
@@ -185,7 +190,7 @@ function renderProg(){
   const cs=custList();const called=cs.filter(c=>callOf(c.user_id).result==='통화함').length;
   const ids=new Set(cs.map(c=>+c.user_id));const mv=D.reservations.filter(r=>r.active&&r.needs_move&&ids.has(+r.user_id));
   const done=mv.filter(r=>r.moved).length;
-  $('prog').innerHTML=`<span>통화 <b>${called}</b>/${cs.length}명</span><span>옮김 <b>${done}</b>/${mv.length}건</span>`;
+  $('prog').innerHTML=`<span>통화함 <b>${called}</b>/${cs.length}명</span><span>옮김 완료 <b>${done}</b>/${mv.length}건</span>`;
 }
 function renderChips(){
   const teams=D.me.teams;const box=$('teamchips');
@@ -206,7 +211,7 @@ function render(){
 ['cust','stop','guide'].forEach(t=>$('t-'+t).onclick=()=>{TAB=t;render();window.scrollTo(0,0);});
 
 const OPT={
-  result:['통화함','부재(다시 걸기)','거절','연락 안 됨'],
+  result:['통화함','부재(다시 걸기)','거절','연락 안 됨(문자 보냄)'],
   parking:['','지상 야외','지하','필로티','기계식','모름'],
   sun:['','오전','낮','오후','상시 그늘'],
   indoor_move:['','가능','불가'],
@@ -219,11 +224,11 @@ function altOpts(c){
 function sel(name,opts,val,uid,label){return `<label class="f">${label}<select data-uid="${uid}" data-k="${name}">${opts.map(o=>`<option value="${esc(o)}" ${o===(val||'')?'selected':''}>${o?esc(o):'선택'}</option>`).join('')}</select></label>`;}
 
 function moveCtl(r){
-  if(r.moved){const [cls,txt]=moveState(r);return `<div class="mv"><div class="mvh"><span>${fmtKst(r.orig_kst)} → ${fmtKst(r.kst)} · ${esc(r.tech)}</span><span class="st ${cls}">${txt}</span></div></div>`;}
+  if(r.moved){const [cls,txt]=moveState(r);return `<div class="mv"><div class="mvh"><span>${fmtKst(r.orig_kst)} → ${fmtKst(r.kst)} · ${techLabel(r)}</span><span class="st ${cls}">${txt}</span></div></div>`;}
   const m=moveOf(r.rid);const [cls,txt]=moveState(r);const td=m.target_date||r.orig_kst.slice(0,10);
   const con=m.target_hour?`<div class="seg"><button data-consent="${r.rid}" aria-pressed="${!!m.consent_date}">${m.consent_date?`고객 동의함 (${fmtDate(m.consent_date)} 통화)`:'고객이 이 날짜·시각에 동의함'}</button></div>`:'';
   return `<div class="mv" data-mv="${r.rid}">
-    <div class="mvh"><span>${fmtKst(r.kst)} · ${esc(r.tech)}</span><span class="st ${cls}">${txt}</span></div>
+    <div class="mvh"><span>${fmtKst(r.kst)} · ${techLabel(r)}</span><span class="st ${cls}">${txt}</span></div>
     <div class="row"><label class="f">옮길 날짜<input type="date" data-rid="${r.rid}" data-k="target_date" value="${esc(td)}" min="${kstToday()}" max="2027-02-28"></label>
     <div class="seg" role="group" aria-label="옮길 시각">${['10시','12시','14시'].map(h=>`<button data-rid="${r.rid}" data-hour="${h}" aria-pressed="${m.target_hour===h}">${h}</button>`).join('')}</div></div>
     ${con}
@@ -244,7 +249,7 @@ function viewCust(){
   if(!cs.length)return '<p class="empty">해당하는 고객이 없습니다</p>';
   return '<div class="list">'+cs.map(c=>{
     const k=callOf(c.user_id);const rs=resvOf(c.user_id);
-    const keep=rs.filter(r=>!r.needs_move).map(r=>`<div><span>${fmtKst(r.kst)} · ${esc(r.tech)}</span><span class="st ok">그대로</span></div>`).join('');
+    const keep=rs.filter(r=>!r.needs_move).map(r=>`<div><span>${fmtKst(r.kst)} · ${techLabel(r)}</span><span class="st ok">그대로</span></div>`).join('');
     const mv=rs.filter(r=>r.needs_move);
     const q=custReq(c);const open=mv.filter(r=>!r.moved);
     const links=open.filter(asked).map(r=>moveOf(r.rid).slack_ts).filter(Boolean).map((ts,i,a)=>`<a class="note" href="https://trydrive.slack.com/archives/C0A9F7H5M0E/p${String(ts).replace('.','')}" target="_blank" rel="noopener">슬랙 글${a.length>1?' '+(i+1):''} 보기</a>`).join(' ');
@@ -254,23 +259,28 @@ function viewCust(){
     else if(open.length){
       if(q.ready.length)req+=`<div class="req">${q.ready.map(r=>esc(reqLine(r))).join('<br>')}</div>
         <div class="row"><button class="btn sm" data-ask="${c.user_id}">차비스에게 부탁하기 (${q.ready.length}건)</button></div>
-        <p class="note">예약마다 글이 하나씩 #caramel_팀장에 올라갑니다. 차비스 카드에 [실행]이 있으면 누릅니다. [겹쳐도 실행]만 있으면 [안 함]을 누르고 고객과 다른 시각을 다시 잡습니다${q.missing.length?` · 동의를 안 누른 ${q.missing.length}건은 이번에 빠집니다`:''}</p>`;
+        <p class="note">누르면 #caramel_팀장에 예약마다 글이 하나씩 올라가고, 그 글의 스레드에 차비스 카드가 달립니다.<br>
+        · 카드에 [실행]이 있으면 팀장님이 누릅니다. 안 누르면 운영팀 승인 시간(12·15·18시)에 운영팀이 처리합니다.<br>
+        · [겹쳐도 실행]·[휴무여도 실행]·[근무시간 밖이어도 실행]·[상한 넘겨 실행]처럼 '그래도 실행' 버튼만 있으면 누르지 않습니다. [안 함]을 누르고 고객에게 다시 전화해 다른 시각을 잡습니다.${q.missing.length?`<br>· 동의를 안 누른 ${q.missing.length}건은 이번에 빠집니다.`:''}</p>`;
       else if(q.missing.length)req+=`<p class="note">예약마다 시각을 고르고 '고객이 이 날짜·시각에 동의함'을 누르면 부탁 버튼이 생깁니다</p>`;
-      if(q.stale.length)req+=`<div class="row"><button class="btn ghost sm" data-ask="${c.user_id}" data-again="1">차비스에게 다시 부탁하기 (${q.stale.length}건)</button></div>`;
+      if(q.stale.length)req+=`<div class="row"><button class="btn ghost sm" data-ask="${c.user_id}" data-again="1">차비스에게 다시 부탁하기 (${q.stale.length}건)</button></div>
+        <p class="note">다시 부탁하기 전에 슬랙의 예전 차비스 카드에 [안 함]을 눌러 주세요. 두 카드가 다 실행되면 고객에게 알림이 두 번 갑니다.</p>`;
+      if(open.some(r=>moveState(r)[1]==='부탁한 뒤 바뀜 · 다시 부탁할 것'))req+=`<p class="note">'부탁한 뒤 바뀜'은 팀장님이 시각을 바꿨거나 고객이 앱에서 예약을 바꾼 경우입니다. 예전 카드에 [안 함]을 누르고 새 시각으로 다시 부탁합니다.</p>`;
       if(links)req+=`<div class="row">${links}</div>`;
     }
+    if(mv.some(r=>moveState(r)[1]==='옮겨졌지만 부탁한 시각과 다름'))req+=`<p class="note">'부탁한 시각과 다름'은 고객이 동의한 시각과 다르게 옮겨진 예약입니다. 고객에게 바뀐 시각을 전화로 알리고, 그 예약의 슬랙 글 스레드에 남겨 주세요.</p>`;
     if(open.length&&c.ticket==='컨시어지 케어')req+=`<p class="note">컨시어지 고객은 옮겨도 카카오톡 알림이 가지 않습니다. 통화에서 바뀐 날짜·시각을 직접 확정해 주세요</p>`;
     return `<article class="card ${k.result==='통화함'?'done':''}" id="c${c.user_id}">
       <div class="chead"><b>${esc(c.name)}</b><span class="tag">${esc(c.ticket)} · ${esc(c.wash_kind)}<br>${esc(c.car_class)} · ${esc(teamLabel(c.team))}</span></div>
-      <div class="meta">${esc(c.cars)}<br>${esc(c.building||'건물명 없음')} · 주차 ${esc(c.lot)}</div>
+      <div class="meta">${esc(c.cars)}<br>${esc(c.building||'건물명 없음')} · 주차 ${esc(lotLabel(c.lot))}</div>
       <div class="row"><a class="call" href="tel:${esc(String(c.phone).replace(/-/g,''))}">전화 걸기</a><span class="phone">${esc(c.phone)}</span></div>
-      ${mv.length?`<p class="sub">옮길 예약 ${mv.filter(r=>!r.moved).length}건 · 같은 날 10·12·14시로</p>${mv.map(moveCtl).join('')}${req}`:''}
+      ${mv.length?`<p class="sub">옮길 예약 ${mv.filter(r=>!r.moved).length}건 · 10·12·14시로</p><p class="note">같은 날 낮 시각을 먼저 권하고, 고객이 원하면 다른 날(2/28까지)도 됩니다. 담당 테크니션은 그대로입니다.</p>${mv.map(moveCtl).join('')}${req}`:''}
       ${keep?`<div class="resv"><p class="sub">그대로 두는 예약 ${rs.length-mv.length}건</p>${keep}</div>`:''}
       <p class="sub">통화 결과</p>
       <div class="seg" role="group" aria-label="통화 결과">${OPT.result.map(o=>`<button data-uid="${c.user_id}" data-res="${esc(o)}" aria-pressed="${k.result===o}">${esc(o)}</button>`).join('')}</div>
-      <div class="row">${sel('parking',OPT.parking,k.parking,c.user_id,'①주차 위치')}${sel('indoor_move',OPT.indoor_move,k.indoor_move,c.user_id,'②실내로 옮길 수 있나')}</div>
-      <div class="row">${sel('alt_intent',altOpts(c),k.alt_intent||(altOpts(c).length===1?'해당 없음':''),c.user_id,'③1주 뒤도 못 할 때 대안')}${sel('sun',OPT.sun,k.sun,c.user_id,'④해 드는 시간(테크니션 확인)')}</div>
-      <label class="f">메모<textarea data-uid="${c.user_id}" data-k="memo" rows="1">${esc(k.memo||'')}</textarea></label>
+      <div class="row">${sel('parking',OPT.parking,k.parking,c.user_id,'①주차 위치')}${sel('indoor_move',OPT.indoor_move,k.indoor_move,c.user_id,'②그날 실내로 옮길 수 있나')}</div>
+      <div class="row">${sel('alt_intent',altOpts(c),k.alt_intent||(altOpts(c).length===1?'해당 없음':''),c.user_id,'③한 주 미뤄도 안 될 때')}${sel('sun',OPT.sun,k.sun,c.user_id,'④해 드는 시간(테크니션)')}</div>
+      <label class="f">메모 (칸 밖을 누르면 저장)<textarea data-uid="${c.user_id}" data-k="memo" rows="1">${esc(k.memo||'')}</textarea></label>
       <span class="saved" id="s${c.user_id}" ${k.updated_at?'':'hidden'}>${k.updated_at?'저장됨 '+new Date(k.updated_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):''}</span>
     </article>`;}).join('')+'</div>';
 }
@@ -280,7 +290,7 @@ const ACTIONS=['같은 날 낮으로','1주 뒤로','와이퍼','탁송','고객
 function viewStop(){
   const teams=D.me.teams;const cs=custList();
   const list=D.stops.filter(s=>TEAM==='all'||s.team===TEAM);
-  return `<p class="note" style="margin-top:12px">테크니션이 세차를 멈추면 한 줄 남깁니다. 실내 주차장도 남깁니다. 중단 이유 1순위는 차 표면 결빙(언 물기를 닦으면 스크래치)입니다.</p>
+  return `<p class="note" style="margin-top:12px">테크니션이 추워서 세차를 못 하거나 중간에 멈추면, 테크니션 보고를 받아 팀장님이 한 줄 남깁니다. 실내 주차장에서 멈춘 것도 남깁니다. 날짜와 중단 이유만 넣어도 저장됩니다. 중단 이유 1순위는 차 표면 결빙(언 물기를 닦으면 스크래치)입니다.</p>
   <form class="card stopform" id="stopf">
     <div class="row"><label class="f">날짜<input type="date" name="wash_date" value="${kstToday()}" required></label>
     <label class="f">팀<select name="team">${teams.map(z=>`<option value="${z}" ${TEAM===z?'selected':''}>${esc(teamLabel(z))}</option>`).join('')}</select></label></div>
@@ -298,7 +308,7 @@ function viewStop(){
   <div class="list">${list.map(s=>{const n=D.stops.filter(x=>x.customer&&x.customer===s.customer).length;return `<div class="card">
     <div class="chead"><b>${fmtDate(s.wash_date)} · ${esc(s.customer||'고객 미입력')}</b><span class="tag">${esc(s.lot)} · ${esc(teamLabel(s.team))}</span></div>
     <div class="meta">${esc(s.reason)} · 차 표면 ${s.car_temp??'-'}℃ · 기온 ${s.air_temp??'-'}℃<br>처리 ${esc(s.action)}${s.new_date?` → ${fmtDate(s.new_date)}`:''}${s.carry?' · 세차권 이월':''}${s.tech?` · ${esc(s.tech)}`:''}</div>
-    ${n>=2?`<div class="st need">이 고객 ${n}번째 중단 → 야외처럼 10·12·14시로 잡도록 운영에 알림</div>`:''}
+    ${n>=2?`<div class="st need">이 고객 ${n}번째 중단 → 이 고객은 10·12·14시로만 잡아야 합니다. 이 화면은 자동으로 알리지 않으니 운영팀에 직접 알려 주세요</div>`:''}
     ${s.memo?`<div class="meta">${esc(s.memo)}</div>`:''}
     <div><button class="btn ghost sm" data-del="${s.id}">지우기</button></div></div>`;}).join('')}</div>`;
 }
@@ -319,7 +329,20 @@ function viewGuide(){
   <li>마무리: "바뀐 일정은 카카오톡 「예약 확정 안내」로 받으실 거예요."</li>
   <li>컨시어지 고객 마무리: 카카오톡 알림이 가지 않으니 "○일 ○시로 확정해 두겠습니다"로 통화에서 직접 확정</li>
   <li>통화가 끝나면 화면에서 통화 결과 → 시각 → '고객이 이 날짜·시각에 동의함' 순서로 누름</li></ul></details>
+  <details class="guide"><summary>자주 묻는 질문</summary><ul>
+  <li><b>어떤 고객이 나오나요?</b> 12/1–2/28 예약이 있고, 주차 위치가 야외로 등록됐거나 비어 있지만 테크니션 기록상 야외인 고객입니다. 예약이 없어지거나 세차가 끝나면 목록에서 빠집니다.</li>
+  <li><b>우리 팀이 아닌 테크니션 예약이 왜 있나요?</b> 고객은 예약이 가장 많은 팀 하나에만 들어갑니다. 한 번 통화로 그 고객의 예약을 모두 정리하려는 것입니다. 시각만 옮기고 담당은 그대로입니다. 다른 팀 담당 예약에는 "(Z3 담당)"처럼 표시됩니다.</li>
+  <li><b>순서가 어떻게 되나요?</b> 전화 → 통화 결과 '통화함' → 옮길 예약마다 날짜·시각 고르기 → '고객이 이 날짜·시각에 동의함' → [차비스에게 부탁하기] → 슬랙 스레드의 차비스 카드에서 [실행]. 통화함과 동의가 없으면 부탁 버튼이 생기지 않습니다.</li>
+  <li><b>동의를 눌렀는데 풀렸어요.</b> 날짜나 시각을 바꾸면 동의가 지워집니다. 고객이 동의한 날짜·시각에만 동의가 붙어 있어야 해서입니다. 바꾼 시각으로 다시 동의를 받고 누릅니다.</li>
+  <li><b>차비스 카드는 어디 있고 누가 누르나요?</b> #caramel_팀장에 올라간 글의 스레드에 달립니다. 팀장님이 [실행]을 누르면 바로 옮겨지고, 고객에게 카카오톡 「예약 확정 안내」가 갑니다(컨시어지 고객 제외). 안 누르면 운영팀 승인 시간(12·15·18시)에 운영팀이 처리합니다.</li>
+  <li><b>고객이 좋다고 한 시각에 담당이 이미 다른 예약이 있으면요?</b> 차비스 카드에 [겹쳐도 실행]처럼 '그래도 실행' 버튼만 붙습니다. 누르지 말고 [안 함]을 누른 뒤, 고객에게 다시 전화해 다른 시각을 잡고 화면에서 시각과 동의를 다시 누릅니다.</li>
+  <li><b>'옮김 완료'는 언제 바뀌나요?</b> 차비스가 옮긴 뒤 다음 예약 정보 갱신 때 바뀝니다(06–22시 30분마다, 최대 30분). 그 전까지는 '차비스에 부탁함'으로 보입니다.</li>
+  <li><b>'부탁 후 N시간째 그대로'는요?</b> 부탁하고 3시간이 지나도 예약이 안 바뀐 경우입니다. 슬랙 글에서 카드가 어떻게 됐는지 봅니다. 카드가 막혀 있으면 [안 함]을 누르고 [차비스에게 다시 부탁하기]를 누릅니다. 같은 부탁은 1시간 안에 다시 올라가지 않습니다.</li>
+  <li><b>잘못 부탁했어요.</b> 아직 실행 전이면 카드에 [안 함]을 누릅니다. 이미 옮겨졌으면 그 글 스레드에 "@차비스 예약 ○○번 ○/○ ○시로 다시 옮겨줘"처럼 예약 번호와 시각을 함께 적어 부탁하고, 고객에게 전화로 알립니다.</li>
+  <li><b>위 숫자는 뭔가요?</b> '통화함 3/12명'은 목록 고객 중 통화 결과를 '통화함'으로 남긴 수, '옮김 완료 2/9건'은 옮겨야 하는 예약 중 실제로 10·12·14시로 바뀐 수입니다.</li>
+  <li><b>다른 휴대폰에서 바꾼 게 안 보여요.</b> 다른 앱에 갔다가 돌아오면 새로 불러옵니다. 그래도 그대로면 화면을 새로고침합니다.</li></ul></details>
   <details class="guide"><summary>월요일 전화</summary><ul>
+  <li>월요일·수요일 아침 8시 10분에 #caramel_팀장에 팀장님 태그로 이번 주 예약별 판정 글(가능·애매·불가)이 올라옵니다. 그 글을 보고 아래처럼 전화합니다. 4일 뒤부터는 덜 정확한 예보(중기예보)라 수요일에 한 번 더 확인해서 올립니다.</li>
   <li>가능: "이번 주 그날은 기온이 괜찮아서 예정대로 진행할게요. 당일에 갑자기 추워지면 아침에 다시 연락드릴게요."</li>
   <li>애매: "그날 영하 근처라 어려울 수도 있어요. 예약은 그대로 두고 당일 아침에 다시 연락드릴게요."</li>
   <li>불가: "그날은 영하나 눈 예보가 있어서 다음 주 같은 요일 낮으로 옮겨 드리려고 하는데 괜찮으실까요?"</li></ul></details>
