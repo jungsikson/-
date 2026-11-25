@@ -308,9 +308,12 @@ function bind(){
     const td=box.querySelector('input[data-k="target_date"]').value;
     saveMove(rid,{target_hour:b.dataset.hour,target_date:td,consent_date:moveOf(rid).consent_date||kstToday()});});
   v.querySelectorAll('button[data-copy]').forEach(b=>b.onclick=async()=>{const uid=+b.dataset.copy;const c=D.customers.find(x=>+x.user_id===uid);const txt=custReq(c).text;
-    try{await navigator.clipboard.writeText(txt);toast('복사했습니다. 슬랙에서 @차비스 입력 후 붙여넣기');}
-    catch(_){const r=document.createRange();r.selectNodeContents($('q'+uid));const s=getSelection();s.removeAllRanges();s.addRange(r);toast('글을 길게 눌러 복사해 주세요');}
-    const now=new Date().toISOString();for(const rid of b.dataset.rids.split(',').filter(Boolean))await saveMove(+rid,{requested_at:now},false);render();});
+    const rids=b.dataset.rids.split(',').filter(Boolean);const now=new Date().toISOString();
+    // 복사는 기다리지 않고 1.5초 안에 안 되면 글을 선택해 둔다(일부 앱 안 브라우저는 복사 허락이 오지 않음)
+    const copied=await Promise.race([navigator.clipboard?.writeText(txt).then(()=>true,()=>false)??Promise.resolve(false),new Promise(r=>setTimeout(()=>r(false),1500))]);
+    if(copied)toast('복사했습니다. 슬랙에서 @차비스 입력 후 붙여넣기');
+    else{const r=document.createRange();r.selectNodeContents($('q'+uid));const s=getSelection();s.removeAllRanges();s.addRange(r);toast('글을 길게 눌러 복사해 주세요');}
+    await Promise.all(rids.map(rid=>saveMove(+rid,{requested_at:now},false)));render();});
   const f=$('stopf');
   if(f)f.onsubmit=async e=>{e.preventDefault();const fd=new FormData(f);const o=Object.fromEntries(fd.entries());
     o.carry=fd.get('carry')==='on';o.rid=o.rid?+o.rid:null;o.car_temp=o.car_temp===''?null:+o.car_temp;o.air_temp=o.air_temp===''?null:+o.air_temp;if(!o.new_date)delete o.new_date;
