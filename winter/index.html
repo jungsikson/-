@@ -58,6 +58,9 @@ label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--in
 .row>label.f{flex:1 1 140px}
 label.f select,label.f input,label.f textarea{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:10px;font-size:16px;color:var(--ink);width:100%}
 textarea{resize:vertical;min-height:44px}
+.mv{background:var(--bg);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px;font-size:14px;font-variant-numeric:tabular-nums}
+.mv>span,.mvh{display:flex;justify-content:space-between;gap:8px}
+.card .sub{font-size:14px;margin:4px 0 0;color:var(--ink2)}
 .saved{font-size:13px;color:var(--good)}
 .saved.err{color:var(--bad)}
 .call{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;border-radius:10px;padding:10px 14px;background:var(--ink);color:#fff;font-weight:600;min-height:44px;font-size:16px}
@@ -88,7 +91,6 @@ details.guide ul{margin:8px 0 0;padding-left:18px;font-size:14px;display:flex;fl
       <div class="prog" id="prog"></div>
       <div class="tabs" role="tablist">
         <button role="tab" id="t-cust" aria-selected="true">고객</button>
-        <button role="tab" id="t-move" aria-selected="false">옮길 예약</button>
         <button role="tab" id="t-stop" aria-selected="false">중단 기록</button>
         <button role="tab" id="t-guide" aria-selected="false">전화 대본</button>
       </div>
@@ -107,7 +109,7 @@ const SB=window.supabase.createClient('https://tzxsjwkahzosmvmvpxxc.supabase.co'
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const WD='일월화수목금토';
-let D=null, TAB='cust', TEAM='all', BOOTED=false;
+let D=null, TAB='cust', TEAM='all', BOOTED=false, ONLYMOVE=false;
 
 function kstToday(){const d=new Date(Date.now()+9*3600e3);return d.toISOString().slice(0,10);}
 function fmtDate(ymd){if(!ymd)return '';const [y,m,d]=ymd.split('-').map(Number);const w=new Date(Date.UTC(y,m-1,d)).getUTCDay();return `${m}/${d}(${WD[w]})`;}
@@ -146,7 +148,7 @@ SB.auth.onAuthStateChange((ev,s)=>{const u=s?.user;if(u&&/@thetrive\.com$/i.test
 const callOf=uid=>D.calls.find(c=>+c.user_id===+uid)||{};
 const moveOf=rid=>D.moves.find(m=>+m.rid===+rid)||{};
 function teamLabel(z){return `${z} ${D.leaders[z]||''}`;}
-function inTeam(c){return TEAM==='all'||c.team===TEAM||D.reservations.some(r=>+r.user_id===+c.user_id&&r.team===TEAM);}
+function inTeam(c){return TEAM==='all'||c.team===TEAM;}
 function custList(){
   const order={'컨시어지 케어':0,'구독':1,'패키지':2,'1회권':3};
   return D.customers.filter(c=>c.active&&inTeam(c)).sort((a,b)=>(a.team>b.team)-(a.team<b.team)||(b.n_move>0)-(a.n_move>0)||(order[a.ticket]-order[b.ticket])||String(a.first_kst).localeCompare(b.first_kst));
@@ -156,27 +158,27 @@ function moveState(r){if(r.moved)return ['ok','옮김 완료'];const m=moveOf(r.
 
 function renderProg(){
   const cs=custList();const called=cs.filter(c=>callOf(c.user_id).result==='통화함').length;
-  const mv=D.reservations.filter(r=>r.active&&r.needs_move&&(TEAM==='all'||r.team===TEAM||cs.some(c=>+c.user_id===+r.user_id)));
+  const ids=new Set(cs.map(c=>+c.user_id));const mv=D.reservations.filter(r=>r.active&&r.needs_move&&ids.has(+r.user_id));
   const done=mv.filter(r=>r.moved).length;
   $('prog').innerHTML=`<span>통화 <b>${called}</b>/${cs.length}명</span><span>옮김 <b>${done}</b>/${mv.length}건</span>`;
 }
 function renderChips(){
   const teams=D.me.teams;const box=$('teamchips');
-  if(teams.length<2){box.innerHTML='';return;}
-  box.innerHTML=['all',...teams].map(z=>`<button class="chip" aria-pressed="${TEAM===z}" data-z="${z}">${z==='all'?'전체':esc(teamLabel(z))}</button>`).join('');
-  box.querySelectorAll('button').forEach(b=>b.onclick=()=>{TEAM=b.dataset.z;render();});
+  const tc=teams.length<2?'':['all',...teams].map(z=>`<button class="chip" aria-pressed="${TEAM===z}" data-z="${z}">${z==='all'?'전체':esc(teamLabel(z))}</button>`).join('');
+  box.innerHTML=tc+(TAB==='cust'?`<button class="chip" aria-pressed="${ONLYMOVE}" id="onlymove">옮길 예약 있는 고객만</button>`:'');
+  box.querySelectorAll('button[data-z]').forEach(b=>b.onclick=()=>{TEAM=b.dataset.z;render();});
+  const om=$('onlymove');if(om)om.onclick=()=>{ONLYMOVE=!ONLYMOVE;render();};
 }
 function render(){
-  ['cust','move','stop','guide'].forEach(t=>$('t-'+t).setAttribute('aria-selected',TAB===t));
+  ['cust','stop','guide'].forEach(t=>$('t-'+t).setAttribute('aria-selected',TAB===t));
   renderChips();renderProg();
   const v=$('view');
   if(TAB==='cust')v.innerHTML=viewCust();
-  else if(TAB==='move')v.innerHTML=viewMove();
   else if(TAB==='stop')v.innerHTML=viewStop();
   else v.innerHTML=viewGuide();
   bind();
 }
-['cust','move','stop','guide'].forEach(t=>$('t-'+t).onclick=()=>{TAB=t;render();window.scrollTo(0,0);});
+['cust','stop','guide'].forEach(t=>$('t-'+t).onclick=()=>{TAB=t;render();window.scrollTo(0,0);});
 
 const OPT={
   result:['통화함','부재(다시 걸기)','거절','연락 안 됨'],
@@ -191,43 +193,43 @@ function altOpts(c){
 }
 function sel(name,opts,val,uid,label){return `<label class="f">${label}<select data-uid="${uid}" data-k="${name}">${opts.map(o=>`<option value="${esc(o)}" ${o===(val||'')?'selected':''}>${o?esc(o):'선택'}</option>`).join('')}</select></label>`;}
 
+function moveCtl(r){
+  if(r.moved)return `<div class="mv"><span>${fmtKst(r.orig_kst)} → ${fmtKst(r.kst)} · ${esc(r.tech)}</span><span class="st ok">옮김 완료</span></div>`;
+  const m=moveOf(r.rid);const [cls,txt]=moveState(r);const td=m.target_date||r.orig_kst.slice(0,10);
+  return `<div class="mv" data-mv="${r.rid}">
+    <div class="mvh"><span>${fmtKst(r.kst)} · ${esc(r.tech)}</span><span class="st ${cls}">${txt}</span></div>
+    <div class="row"><label class="f">옮길 날짜<input type="date" data-rid="${r.rid}" data-k="target_date" value="${esc(td)}"></label>
+    <div class="seg" role="group" aria-label="옮길 시각">${['10시','12시','14시'].map(h=>`<button data-rid="${r.rid}" data-hour="${h}" aria-pressed="${m.target_hour===h}">${h}</button>`).join('')}</div></div>
+  </div>`;
+}
+function custReq(c){
+  const rs=resvOf(c.user_id).filter(r=>r.needs_move&&!r.moved);
+  const lines=rs.map(r=>{const m=moveOf(r.rid);if(!m.target_hour)return null;const td=m.target_date||r.orig_kst.slice(0,10);
+    return `- 예약 ${r.rid}번: ${fmtKst(r.kst)} → ${fmtDate(td)} ${m.target_hour} (담당 ${r.tech} 그대로)`;}).filter(Boolean);
+  if(!lines.length)return {text:'',rids:[]};
+  const cd=(rs.map(r=>moveOf(r.rid).consent_date).find(Boolean))||kstToday();
+  return {text:`${c.name} 고객 예약 ${lines.length}건 옮겨줘. 사유: 동계 야외 낮 시간 이동, 고객 동의 ${fmtDate(cd).replace(/\(.\)/,'')} 전화\n${lines.join('\n')}`,rids:rs.filter(r=>moveOf(r.rid).target_hour).map(r=>r.rid)};
+}
 function viewCust(){
-  const cs=custList();if(!cs.length)return '<p class="empty">이 팀의 겨울 야외 예약 고객이 없습니다</p>';
+  let cs=custList();if(ONLYMOVE)cs=cs.filter(c=>resvOf(c.user_id).some(r=>r.needs_move&&!r.moved));
+  if(!cs.length)return '<p class="empty">해당하는 고객이 없습니다</p>';
   return '<div class="list">'+cs.map(c=>{
     const k=callOf(c.user_id);const rs=resvOf(c.user_id);
-    const resv=rs.map(r=>{const [cls,txt]=r.needs_move?moveState(r):['','' ];return `<div><span>${fmtKst(r.kst)} · ${esc(r.tech)}${r.needs_move&&r.orig_kst!==r.kst?` <span class="meta">(원래 ${fmtKst(r.orig_kst)})</span>`:''}</span>${txt?`<span class="st ${cls}">${txt}</span>`:''}</div>`;}).join('');
+    const keep=rs.filter(r=>!r.needs_move).map(r=>`<div><span>${fmtKst(r.kst)} · ${esc(r.tech)}</span><span class="st ok">그대로</span></div>`).join('');
+    const mv=rs.filter(r=>r.needs_move);
+    const q=custReq(c);const req=mv.some(r=>!r.moved)?(q.text?`<div class="req" id="q${c.user_id}">${esc(q.text).replace(/\n/g,'<br>')}</div><div class="row"><button class="btn sm" data-copy="${c.user_id}" data-rids="${q.rids.join(',')}">차비스 부탁 글 복사</button><span class="note">#caramel_팀장에서 @차비스 입력 후 붙여넣기. [겹쳐도 실행] 금지</span></div>`:'<p class="note">옮길 예약마다 시각을 고르면 차비스 부탁 글이 한 번에 만들어집니다</p>'):'';
     return `<article class="card ${k.result==='통화함'?'done':''}" id="c${c.user_id}">
       <div class="chead"><b>${esc(c.name)}</b><span class="tag">${esc(c.ticket)} · ${esc(c.wash_kind)}<br>${esc(c.car_class)} · ${esc(teamLabel(c.team))}</span></div>
       <div class="meta">${esc(c.cars)}<br>${esc(c.building||'건물명 없음')} · 주차 ${esc(c.lot)}</div>
-      <div class="resv">${resv}</div>
       <div class="row"><a class="call" href="tel:${esc(String(c.phone).replace(/-/g,''))}">전화 걸기</a><span class="phone">${esc(c.phone)}</span></div>
+      ${mv.length?`<p class="sub">옮길 예약 ${mv.filter(r=>!r.moved).length}건 · 같은 날 10·12·14시로</p>${mv.map(moveCtl).join('')}${req}`:''}
+      ${keep?`<div class="resv"><p class="sub">그대로 두는 예약 ${rs.length-mv.length}건</p>${keep}</div>`:''}
+      <p class="sub">통화 결과</p>
       <div class="seg" role="group" aria-label="통화 결과">${OPT.result.map(o=>`<button data-uid="${c.user_id}" data-res="${esc(o)}" aria-pressed="${k.result===o}">${esc(o)}</button>`).join('')}</div>
       <div class="row">${sel('parking',OPT.parking,k.parking,c.user_id,'①주차 위치')}${sel('indoor_move',OPT.indoor_move,k.indoor_move,c.user_id,'②실내로 옮길 수 있나')}</div>
       <div class="row">${sel('alt_intent',altOpts(c),k.alt_intent||(altOpts(c).length===1?'해당 없음':''),c.user_id,'③1주 뒤도 못 할 때 대안')}${sel('sun',OPT.sun,k.sun,c.user_id,'④해 드는 시간(테크니션 확인)')}</div>
       <label class="f">메모<textarea data-uid="${c.user_id}" data-k="memo" rows="1">${esc(k.memo||'')}</textarea></label>
       <span class="saved" id="s${c.user_id}" ${k.updated_at?'':'hidden'}>${k.updated_at?'저장됨 '+new Date(k.updated_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):''}</span>
-    </article>`;}).join('')+'</div>';
-}
-
-function reqText(r,m){
-  if(!m.target_date||!m.target_hour||!m.consent_date)return '';
-  const tech=m.new_tech?`담당은 ${m.new_tech} 테크니션으로.`:'담당은 그대로.';
-  return `예약 ${r.rid}번을 ${fmtDate(m.target_date)} ${m.target_hour}로 옮겨줘. 지금 일정은 ${fmtKst(r.kst)}, 담당 ${r.tech}. ${tech} 사유: 동계 야외 낮 시간 이동, 고객 동의 ${fmtDate(m.consent_date).replace(/\(.\)/,'')} 전화`;
-}
-function viewMove(){
-  const cs=custList();const ids=new Set(cs.map(c=>+c.user_id));
-  const rs=D.reservations.filter(r=>r.active&&r.needs_move&&(ids.has(+r.user_id)||TEAM==='all'||r.team===TEAM)).sort((a,b)=>(a.moved-b.moved)||a.orig_kst.localeCompare(b.orig_kst));
-  if(!rs.length)return '<p class="empty">옮길 예약이 없습니다</p>';
-  return `<p class="note" style="margin-top:12px">고객이 동의하면 날짜·시각·동의일을 고르고 [부탁 글 복사] → #caramel_팀장에서 @차비스 입력 후 붙여넣기. [겹쳐도 실행]은 누르지 않습니다. 예약이 바뀌면 30분 안에 "옮김 완료"로 바뀝니다.</p><div class="list">`+rs.map(r=>{
-    const c=D.customers.find(x=>+x.user_id===+r.user_id)||{};const m=moveOf(r.rid);const [cls,txt]=moveState(r);
-    const td=m.target_date||r.orig_kst.slice(0,10);const cd=m.consent_date||kstToday();const t=reqText(r,{...m,target_date:td,consent_date:cd});
-    return `<article class="card ${r.moved?'done':''}">
-      <div class="chead"><b>${esc(c.name||'')} · 예약 ${r.rid}</b><span class="st ${cls}">${txt}</span></div>
-      <div class="meta">지금 ${fmtKst(r.kst)} · 담당 ${esc(r.tech)} · ${esc(c.ticket||'')}</div>
-      ${r.moved?'':`<div class="row"><label class="f">옮길 날짜<input type="date" data-rid="${r.rid}" data-k="target_date" value="${esc(td)}"></label><label class="f">고객 동의일<input type="date" data-rid="${r.rid}" data-k="consent_date" value="${esc(cd)}"></label></div>
-      <div class="seg" role="group" aria-label="옮길 시각">${['10시','12시','14시'].map(h=>`<button data-rid="${r.rid}" data-hour="${h}" aria-pressed="${m.target_hour===h}">${h}</button>`).join('')}</div>
-      <label class="f">담당 바꿈 (비우면 그대로)<input data-rid="${r.rid}" data-k="new_tech" value="${esc(m.new_tech||'')}" placeholder="테크니션 이름"></label>
-      ${t?`<div class="req" id="q${r.rid}">${esc(t)}</div><div class="row"><button class="btn sm" data-copy="${r.rid}">부탁 글 복사</button>${m.requested_at?'<span class="note">부탁함 표시됨</span>':''}</div>`:'<p class="note">옮길 시각을 고르면 차비스 부탁 글이 만들어집니다</p>'}`}
     </article>`;}).join('')+'</div>';
 }
 
@@ -302,13 +304,13 @@ function bind(){
     saveCall(uid,{result:res,called_at:new Date().toISOString()});});
   v.querySelectorAll('select[data-uid],textarea[data-uid]').forEach(el=>el.onchange=()=>saveCall(+el.dataset.uid,{[el.dataset.k]:el.value}));
   v.querySelectorAll('input[data-rid]').forEach(el=>el.onchange=()=>saveMove(+el.dataset.rid,{[el.dataset.k]:el.value}));
-  v.querySelectorAll('button[data-hour]').forEach(b=>b.onclick=()=>{const rid=+b.dataset.rid;const card=b.closest('.card');
-    const td=card.querySelector('input[data-k="target_date"]').value, cd=card.querySelector('input[data-k="consent_date"]').value;
-    saveMove(rid,{target_hour:b.dataset.hour,target_date:td,consent_date:cd});});
-  v.querySelectorAll('button[data-copy]').forEach(b=>b.onclick=async()=>{const rid=+b.dataset.copy;const txt=$('q'+rid).textContent;
+  v.querySelectorAll('button[data-hour]').forEach(b=>b.onclick=()=>{const rid=+b.dataset.rid;const box=b.closest('.mv');
+    const td=box.querySelector('input[data-k="target_date"]').value;
+    saveMove(rid,{target_hour:b.dataset.hour,target_date:td,consent_date:moveOf(rid).consent_date||kstToday()});});
+  v.querySelectorAll('button[data-copy]').forEach(b=>b.onclick=async()=>{const uid=+b.dataset.copy;const c=D.customers.find(x=>+x.user_id===uid);const txt=custReq(c).text;
     try{await navigator.clipboard.writeText(txt);toast('복사했습니다. 슬랙에서 @차비스 입력 후 붙여넣기');}
-    catch(_){const r=document.createRange();r.selectNodeContents($('q'+rid));const s=getSelection();s.removeAllRanges();s.addRange(r);toast('글을 길게 눌러 복사해 주세요');}
-    saveMove(rid,{requested_at:new Date().toISOString()});});
+    catch(_){const r=document.createRange();r.selectNodeContents($('q'+uid));const s=getSelection();s.removeAllRanges();s.addRange(r);toast('글을 길게 눌러 복사해 주세요');}
+    const now=new Date().toISOString();for(const rid of b.dataset.rids.split(',').filter(Boolean))await saveMove(+rid,{requested_at:now},false);render();});
   const f=$('stopf');
   if(f)f.onsubmit=async e=>{e.preventDefault();const fd=new FormData(f);const o=Object.fromEntries(fd.entries());
     o.carry=fd.get('carry')==='on';o.rid=o.rid?+o.rid:null;o.car_temp=o.car_temp===''?null:+o.car_temp;o.air_temp=o.air_temp===''?null:+o.air_temp;if(!o.new_date)delete o.new_date;
