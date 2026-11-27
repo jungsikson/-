@@ -490,7 +490,8 @@ function cardBody(c){
     ${k.result==='부재(다시 걸기)'?'<p class="note">1시간 뒤 한 번 더 → 그래도 안 받으면 "전화드렸는데 연결이 안 돼서요, 편하실 때 연락 주세요" 문자 → \'연락 안 됨(문자 보냄)\'</p>':''}
     <div class="row">${sel('parking',OPT.parking,k.parking,c.user_id,'①주차 위치')}
     ${alt?sel('alt_intent',alt,k.alt_intent,c.user_id,'③중단되면 대안 (회사 부담)'):'<p class="note" style="flex:1 1 140px">③중단되면: 1주 뒤 낮으로 다시</p>'}</div>
-    <label class="f">메모 (칸 밖을 누르면 저장)<textarea data-uid="${c.user_id}" data-k="memo" rows="1">${esc(k.memo||'')}</textarea></label>
+    <p class="note">①주차 위치·메모는 테크니션 앱 예약 화면에 "[겨울] 팀장 통화: …"로 자동으로 넘어갑니다. 테크니션 해피콜은 이걸 보고 확인만 합니다.</p>
+    <label class="f">메모 (칸 밖을 누르면 저장 · 고객이 약속한 자리·협조 내용)<textarea data-uid="${c.user_id}" data-k="memo" rows="1">${esc(k.memo||'')}</textarea></label>
     <span class="saved" id="s${c.user_id}" ${k.updated_at?'':'hidden'}>${k.updated_at?'저장됨 '+new Date(k.updated_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):''}</span>`;
   // 3 예약 정하기
   const rainN=keepRs.filter(r=>rainOf(r)||fcBad(r)).length; // 비 예보·예보 불가가 붙은 예약이 있으면 펼친 채로
@@ -576,7 +577,7 @@ function viewGuide(){
   <details class="guide"><summary>고객 카드 쓰는 법</summary><ul>
   <li>위 칩을 눌러 할 일별로 고객을 봄 → 고객 이름 줄을 누르면 그 고객 카드만 펼쳐짐</li>
   <li><b>1 전화</b>: 이 고객 전화 대본(이름·시각·빈 시각이 채워져 있음) → [전화 걸기]</li>
-  <li><b>2 통화 결과</b>: 통화함·부재·거절·연락 안 됨 → ①주차 위치 → (컨시어지·SA급만) ③중단되면 대안 → 메모(고객이 약속한 주차 자리는 꼭)</li>
+  <li><b>2 통화 결과</b>: 통화함·부재·거절·연락 안 됨 → ①주차 위치 → (컨시어지·SA급만) ③중단되면 대안 → 메모(고객이 약속한 주차 자리는 꼭). 주차 위치·메모와 같은 주소의 지난 중단은 테크니션 앱 예약 메모에 [겨울] 줄로 자동 전달</li>
   <li><b>3 예약 정하기</b>: 고객이 고른 빈 시각 누르기 → 담당 바꿔도 되는지 → '고객이 이 날짜·시각에 동의함'</li>
   <li><b>4 차비스에게 부탁</b>: [차비스에게 부탁하기] → #caramel_팀장 글 스레드의 차비스 카드에서 [실행]. 카드를 열어 두면 30초 안에 '완료'</li></ul></details>
   <details class="guide"><summary>원칙과 하지 않는 말</summary><ul>
