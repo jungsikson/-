@@ -268,7 +268,7 @@ function flow(r){const m=moveOf(r.rid);
   return ['need','① 시각 고르기'];}
 function moveState(r){
   const m=moveOf(r.rid);const rk=reqKey(r);const ch=tgtChanged(m);
-  if(r.canceled){if(r.rebook_rid)return ['ok','완료 · 다시 잡힘'];if(r.rebook_status==='CANCELED')return ['ok','다시 잡은 예약도 취소됨 · 새 줄에서'];if(m.skip)return ['ok',/요청함$/.test(m.skip)?m.skip:'다시 안 잡음'];
+  if(r.canceled){if(r.rebook_rid)return ['ok','완료 · 다시 잡힘'];if(r.rebook_status==='CANCELED')return ['ok','다시 잡은 예약도 취소됨 · 새 줄에서'];if(callOf(r.user_id).result==='거절')return ['ok','고객 거절로 취소'];if(m.skip)return ['ok',/요청함$/.test(m.skip)?m.skip:'다시 안 잡음'];
     {const ha=highAlt(D.customers.find(x=>+x.user_id===+r.user_id)||{});if(ha&&!m.target_hour)return ['need',`${ha} 요청 또는 ① 시각`];}
     return flow(r);}
   if(rk&&r.kst.slice(0,13)===rk&&!ch)return ['ok','완료'];
@@ -278,7 +278,7 @@ function moveState(r){
 // 3에 칸을 보여 줄 예약: 08·16·18시(옮길 것) + 날씨로 펼쳤거나 고른 10·12·14시 + 예보 '불가'
 function inPanel(r){if(r.canceled||!outdoorOK(r))return false;const m=moveOf(r.rid);
   return needsMove(r)||OPEN.has(+r.rid)||!!m.target_hour||!!m.requested_at;}
-const isDone=r=>r.canceled?(!!r.rebook_rid||r.rebook_status==='CANCELED'||!!moveOf(r.rid).skip):moveState(r)[0]==='ok';
+const isDone=r=>r.canceled?(!!r.rebook_rid||r.rebook_status==='CANCELED'||!!moveOf(r.rid).skip||callOf(r.user_id).result==='거절'):moveState(r)[0]==='ok';
 const pendingRebook=uid=>resvOf(uid).filter(r=>r.canceled&&!isDone(r));
 const pendingOf=uid=>resvOf(uid).filter(r=>(r.canceled||inPanel(r))&&!isDone(r));
 
@@ -301,7 +301,7 @@ function taskOf(c,t){const rs=resvOf(c.user_id);const k=callOf(c.user_id);
 function nextOf(c){const k=callOf(c.user_id);
   for(const [t,l] of TASKS){if(t!=='call'&&t!=='lot'&&taskOf(c,t))return l;}
   if(taskOf(c,'call'))return k.result==='부재(다시 걸기)'?'다시 전화':k.result==='연락 안 됨(문자 보냄)'?'회신 기다림 · 다시 전화':'첫 전화';
-  if(k.result==='거절'&&pendingOf(c.user_id).length)return '고객 거절 · 희준님께 알리기';
+  if(k.result==='거절'&&pendingOf(c.user_id).some(r=>!r.canceled))return '고객 거절 · 팀장 앱에서 취소';
   if(taskOf(c,'lot'))return '주차 유형 확인';
   const p=pendingOf(c.user_id);if(p.length)return moveState(p[0])[1];
   return '';}
@@ -528,6 +528,7 @@ function cardBody(c){
   else if(lotWait&&rs.some(r=>r.lot_check&&badHour(r)))s3body+=`<p class="note">이 고객의 ${rs.filter(r=>r.lot_check&&badHour(r)).map(r=>sayK(r.kst)).join(', ')} 예약은 주차 위치를 확인한 뒤 정합니다. 2에서 ①주차 위치를 "지상 야외"로 고르면 여기서 바로 옮길 수 있습니다.</p>`;
   if(!called&&open.length)s3body+=`<p class="note">2에서 '통화함'을 누르면 시각을 고를 수 있습니다.</p>${open.map(r=>`<div class="mvh"><span>${r.canceled?`취소된(${lotOf(r)}) `:''}${fmtKst(r.kst)} · ${techLabel(r)}${r.canceled?'':fcBadge(r)}</span><span class="st need">${r.canceled?'다시 잡을 예약':'옮길 예약'}</span></div>`).join('')}${[...cx,...mv].filter(isDone).map(moveCtl).join('')}`;
   else s3body+=[...cx,...mv].map(moveCtl).join('');
+  if(k.result==='거절'&&open.some(r=>!r.canceled))s3body=`<p class="note"><b>고객이 낮 시간으로 옮기기를 거절했으면 그 예약은 취소합니다.</b> 팀장 앱에서 ${open.filter(r=>!r.canceled).map(r=>sayK(r.kst)).join(', ')} 예약 → 예약 취소 → 「카라멜 과실 취소 (세차권 반환)」, 상세 첫머리에 "[겨울] 낮 이동 거절". 세차권은 고객에게 돌아갑니다. 취소되면 이 줄은 5분 안에 사라집니다.</p>`+s3body;
   if(open.length&&c.ticket==='컨시어지 케어')s3body+='<p class="note">컨시어지는 옮겨도 카카오톡 알림이 안 갑니다. 통화에서 날짜·시각을 확정하세요.</p>';
   const s3=(cx.length||mv.length||keepRs.length||s3body)?`${step(3,'예약 정하기',open.length?` <span class="cnt">${open.length}건 남음</span>`:'')}${s3body||(keepRs.length?'<p class="note">옮길 예약이 없습니다.</p>':'')}${keepHtml}`:'';
   // 4 차비스에게 부탁
@@ -634,7 +635,8 @@ function viewGuide(){
   <li><b>결빙과 상관없는 취소가 '다시 잡기'에 떠요.</b> 회사 사정 취소는 결빙·우천을 DB에서 구분할 수 없어 함께 뜹니다(실내 주차장 취소 포함). 칩 아래 [야외]·[실내]로 거를 수 있습니다. 다시 잡을 필요가 없으면 [다시 안 잡음]에 이유를 적습니다.</li>
   <li><b>실내 주차장인데 얼어서 멈췄어요.</b> 그 취소의 카드 3에서 [결빙 중단이었음]을 누르면 그 주소는 '실내지만 얼 위험'이 되어, 앞으로 야외 고객처럼 명단·예보 판정·10·12·14시에 들어갑니다. 중단 기록에 이유를 결빙으로 남겨도 같습니다.</li>
   <li><b>카드 맨 위 '지난번 중단'은 뭔가요?</b> 같은 주소에서 전에 멈춘 날입니다. 대안: 컨시어지 → 안테나샵 탁송, SA급 → 세차장(둘 다 첫 중단부터), 그 밖 → 1주 뒤 낮.</li>
-  <li><b>고객이 다른 날도 원하지 않으면요?</b> 다시 잡을 예약이면 [다시 안 잡음]에 "고객이 원하지 않음". 남은 예약을 취소해야 하면 팀장 앱에서 「카라멜 과실 취소」 + 상세 "[결빙]"으로 하고, 그 예약이 다시 잡기 목록에 뜨면 [다시 안 잡음]을 누릅니다.</li>
+  <li><b>고객이 다른 날도 원하지 않으면요?</b> 다시 잡을 예약이면 [고객이 원하지 않음]을 누릅니다.</li>
+  <li><b>고객이 08·16·18시 예약을 낮으로 옮기기 싫다고 하면요?</b> 그 예약은 취소합니다. 2에서 [거절]을 누르고, 팀장 앱에서 「카라멜 과실 취소 (세차권 반환)」 + 상세 "[겨울] 낮 이동 거절". 세차권은 고객에게 돌아가고, 다시 잡기 목록에는 뜨지 않습니다.</li>
   <li><b>위 숫자는 뭔가요?</b> '통화함 3/12명'은 통화 결과를 '통화함'으로 남긴 고객 수, '옮김 완료 2/9건'은 08·16·18시 예약 중 낮으로 옮겨진 수입니다.</li>
   <li><b>다른 휴대폰에서 바꾼 게 안 보여요.</b> 다른 앱에 갔다 오면 새로 불러옵니다. 그래도 그대로면 새로고침합니다.</li></ul></details>`;
 }
