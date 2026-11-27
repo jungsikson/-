@@ -54,6 +54,30 @@ header.top{position:sticky;top:0;background:var(--bg);z-index:5;padding:14px 0 0
 .fc-bad{background:#FBE9E7;color:var(--bad)} .fc-mid{background:var(--warn-soft);color:var(--warn)} .fc-ok{background:var(--good-soft);color:var(--good)}
 .linkbtn{border:0;background:none;color:var(--ink2);text-decoration:underline;font-size:13px;padding:4px 2px;min-height:32px}
 .cand{display:flex;flex-direction:column;gap:6px}
+.crow{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;width:100%;border:0;background:none;text-align:left;padding:4px 0;min-height:44px}
+.crow .cname{font-weight:700;font-size:17px}
+.crow .tag{color:var(--ink2);font-size:13px}
+.crow .next{margin-left:auto;font-size:14px;font-weight:600;color:var(--warn)}
+.crow .next.ok{color:var(--good)}
+.card.exp{gap:14px}
+.card.done:not(.exp){opacity:.72}
+section.s{display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line);padding-top:12px}
+h3.step{display:flex;align-items:center;gap:8px;font-size:16px;margin:0}
+h3.step .n{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:12px;background:var(--ink);color:#fff;font-size:14px}
+h3.step .cnt{font-size:13px;color:var(--warn);font-weight:600}
+.lab{font-size:14px;color:var(--ink2);margin:4px 0 0}
+.rule{font-size:15px;color:var(--ink);margin:0}
+details.more summary{font-size:14px;color:var(--ink2);cursor:pointer;min-height:40px;display:flex;align-items:center}
+details.more summary::before{content:'▸';margin-right:6px}
+details.more[open] summary::before{content:'▾'}
+details.more summary::-webkit-details-marker{display:none}
+.today{font-size:14px;color:var(--ink);margin:6px 0 2px;width:100%}
+.slk,.maplink{display:inline-flex;align-items:center;min-height:40px;padding:0 4px;color:var(--ink2)}
+.seg button,.btn.sm{min-height:44px}
+.chip{min-height:40px}
+.note{font-size:14px}
+button.consent[aria-pressed="false"]{border-color:var(--accent);color:var(--accent)}
+@media (max-width:420px){#acct{display:none}}
 .tasks{display:flex;gap:6px;flex-wrap:wrap;width:100%}
 .chip.zero{color:var(--meta)}
 details.script{background:var(--bg);border-radius:10px;padding:10px 12px}
@@ -109,8 +133,8 @@ details.guide ul{margin:8px 0 0;padding-left:18px;font-size:14px;display:flex;fl
       <div class="prog" id="prog"></div>
       <div class="tabs" role="tablist">
         <button role="tab" id="t-cust" aria-selected="true">고객</button>
-        <button role="tab" id="t-stop" aria-selected="false">중단 기록</button>
-        <button role="tab" id="t-guide" aria-selected="false">전화 대본</button>
+        <button role="tab" id="t-stop" aria-selected="false">기타 중단 기록</button>
+        <button role="tab" id="t-guide" aria-selected="false">도움말</button>
       </div>
     </header>
     <div class="chips" id="teamchips"></div>
@@ -129,7 +153,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const WD='일월화수목금토';
 let D=null, TAB='cust', TEAM='all', BOOTED=false, TASK='', LOADED=0;
 // OPEN: 날씨로 옮기려고 펼친 10·12·14시 예약, CAND: 예약별 옮길 수 있는 후보(서버가 회사 DB로 계산)
-const OPEN=new Set(), CAND=new Map();
+const OPEN=new Set(), CAND=new Map(); let EXP=0; // EXP: 펼친 고객 하나
 
 function kstToday(){const d=new Date(Date.now()+9*3600e3);return d.toISOString().slice(0,10);}
 function fmtDate(ymd){if(!ymd)return '';const [y,m,d]=ymd.split('-').map(Number);const w=new Date(Date.UTC(y,m-1,d)).getUTCDay();return `${m}/${d}(${WD[w]})`;}
@@ -205,55 +229,68 @@ const slotKey=(ymd,h)=>`${ymd} ${String(parseInt(h,10)).padStart(2,'0')}`;
 // 부탁이 지금 예약·지금 고른 시각과 같은가(아니면 예전 부탁)
 function asked(r){const m=moveOf(r.rid);return !!m.requested_at&&m.req_from_kst===r.kst&&m.req_hour===m.target_hour&&(m.req_date||null)===(m.target_date||null);}
 function reqKey(r){const m=moveOf(r.rid);return m.req_hour?slotKey(m.req_date||r.orig_kst.slice(0,10),m.req_hour):null;}
-function moveState(r){
-  const m=moveOf(r.rid);const rk=reqKey(r);
-  // 회사 사정으로 취소된 회차: 새 예약이 생기면 '다시 잡힘', 팀장이 안 잡기로 하면 '다시 안 잡음'
-  if(r.canceled){if(r.rebook_rid)return ['ok','다시 잡힘'];if(m.skip)return ['ok','다시 안 잡음'];
-    if(asked(r)){const h=(Date.now()-new Date(m.requested_at).getTime())/3600e3;return h>=3?['need',`부탁 후 ${Math.floor(h)}시간째 그대로 · 슬랙 확인`]:['asked','차비스에 부탁함'];}
-    if(m.requested_at)return ['need','부탁한 뒤 바뀜 · 다시 부탁할 것'];
-    if(m.target_hour&&m.consent_date)return ['need','부탁 전'];if(m.target_hour)return ['need','고객 동의 확인 전'];return ['need','다시 잡을 것'];}
-  // 부탁한 날짜·시각에 와 있으면 완료(시간대 이동이든 날씨 이동이든)
-  if(rk&&r.kst.slice(0,13)===rk)return ['ok','옮김 완료'];
-  if(r.needs_move&&r.moved)return rk?['need','옮겨졌지만 부탁한 시각과 다름']:['ok','옮김 완료'];
-  if(asked(r)){const h=(Date.now()-new Date(m.requested_at).getTime())/3600e3;
-    return h>=3?['need',`부탁 후 ${Math.floor(h)}시간째 그대로 · 슬랙 확인`]:['asked','차비스에 부탁함'];}
-  if(m.requested_at)return ['need','부탁한 뒤 바뀜 · 다시 부탁할 것'];
-  if(m.target_hour&&m.consent_date)return ['need','부탁 전'];
-  if(m.target_hour)return ['need','고객 동의 확인 전'];
-  return ['need',r.needs_move?'옮길 것':'옮길 날짜·시각 고르기'];
-}
-// 예보 판정(월·수 08:10 갱신)
+// 부탁한 뒤 팀장이 날짜·시각을 다시 골랐나
+function tgtChanged(m){return !!m.target_hour&&!!m.req_hour&&(m.req_hour!==m.target_hour||(m.req_date||null)!==(m.target_date||null));}
+// 주차 유형 확인 고객이라도 통화에서 야외(지상 야외·필로티)를 확인했으면 바로 옮길 수 있다(서버도 같은 기준)
+const OUTDOOR_ANS=['지상 야외','필로티'];
+function outdoorOK(r){return !r.lot_check||OUTDOOR_ANS.includes(callOf(r.user_id).parking||'');}
+const badHour=r=>![10,12,14].includes(+r.kst.slice(11,13))&&r.kst<'2027-03-01';
+function needsMove(r){return !r.canceled&&(r.needs_move||(r.lot_check&&outdoorOK(r)&&badHour(r)));}
+// 예보 판정(월·수 08:10 갱신). 옮긴 뒤에 나온 '불가'면 다시 연다
 function fcOf(rid){return (D.forecasts||[]).find(f=>+f.rid===+rid);}
-function fcBadge(r){const f=fcOf(r.rid);if(!f||r.lot_check)return '';return ` <span class="fc fc-${f.verdict==='불가'?'bad':f.verdict==='애매'?'mid':'ok'}" title="${esc(f.detail)}">예보 ${esc(f.verdict)}</span>`;}
-// 옮기기 칸을 보여 줄 예약: 08·16·18시(옮길 것) + 날씨로 펼쳤거나 이미 고른 10·12·14시 예약 + 예보 '불가'
-function inPanel(r){if(r.lot_check||r.canceled)return false;if(r.needs_move)return true;const m=moveOf(r.rid);const f=fcOf(r.rid);
-  return OPEN.has(+r.rid)||!!m.target_hour||!!m.requested_at||(f&&f.verdict==='불가'&&moveState(r)[0]!=='ok');}
-const isDone=r=>r.canceled?(!!r.rebook_rid||!!moveOf(r.rid).skip):(moveState(r)[0]==='ok'&&(r.moved||!!reqKey(r)));
+function fcBadge(r){const f=fcOf(r.rid);if(!f||!outdoorOK(r))return '';return ` <span class="fc fc-${f.verdict==='불가'?'bad':f.verdict==='애매'?'mid':'ok'}" title="${esc(f.detail)}">예보 ${esc(f.verdict)}</span>`;}
+function fcReopen(r){const f=fcOf(r.rid);if(!f||f.verdict!=='불가'||r.canceled||!outdoorOK(r))return false;const m=moveOf(r.rid);return !m.requested_at||String(f.judged_at)>String(m.requested_at);}
+// 상태는 단계 하나로 부른다: ① 시각 고르기 → ② 고객 동의 누르기 → ③ 차비스에게 부탁하기 → 차비스 처리 중 → 완료
+function flow(r){const m=moveOf(r.rid);
+  if(asked(r)){const h=(Date.now()-new Date(m.requested_at).getTime())/3600e3;return h>=3?['need',`차비스 ${Math.floor(h)}시간째 그대로 · 슬랙 확인`]:['asked','차비스 처리 중'];}
+  if(m.target_hour&&m.consent_date)return ['need','③ 차비스에게 부탁하기'];
+  if(m.target_hour)return ['need','② 고객 동의 누르기'];
+  return ['need','① 시각 고르기'];}
+function moveState(r){
+  const m=moveOf(r.rid);const rk=reqKey(r);const ch=tgtChanged(m);
+  if(r.canceled){if(r.rebook_rid)return ['ok','완료 · 다시 잡힘'];if(m.skip)return ['ok','다시 안 잡음'];return flow(r);}
+  if(fcReopen(r)&&m.requested_at&&!ch&&!asked(r))return ['need','예보 불가 · ① 다른 날 고르기'];
+  if(rk&&r.kst.slice(0,13)===rk&&!ch)return ['ok','완료'];
+  if(m.requested_at&&!ch&&m.req_from_kst&&r.kst!==m.req_from_kst)return m.skip==='확인함'?['ok','다르게 옮겨짐 · 확인함']:['need','부탁과 다르게 바뀜 · 고객에게 알리기'];
+  if(r.needs_move&&r.moved&&!m.requested_at)return ['ok','완료'];
+  return flow(r);}
+// 3에 칸을 보여 줄 예약: 08·16·18시(옮길 것) + 날씨로 펼쳤거나 고른 10·12·14시 + 예보 '불가'
+function inPanel(r){if(r.canceled||!outdoorOK(r))return false;const m=moveOf(r.rid);
+  return needsMove(r)||OPEN.has(+r.rid)||!!m.target_hour||!!m.requested_at||fcReopen(r);}
+const isDone=r=>r.canceled?(!!r.rebook_rid||!!moveOf(r.rid).skip):moveState(r)[0]==='ok';
 const pendingRebook=uid=>resvOf(uid).filter(r=>r.canceled&&!isDone(r));
+const pendingOf=uid=>resvOf(uid).filter(r=>(r.canceled||inPanel(r))&&!isDone(r));
 
 function renderProg(){
   const cs=custList();const called=cs.filter(c=>callOf(c.user_id).result==='통화함').length;
-  const ids=new Set(cs.map(c=>+c.user_id));const mv=D.reservations.filter(r=>r.active&&r.needs_move&&ids.has(+r.user_id));
-  const done=mv.filter(r=>r.moved).length;
-  const cx=D.reservations.filter(r=>r.active&&r.canceled&&ids.has(+r.user_id));const left=cx.filter(r=>!isDone(r)).length;
-  $('prog').innerHTML=`<span>통화함 <b>${called}</b>/${cs.length}명</span><span>옮김 완료 <b>${done}</b>/${mv.length}건</span>${left?`<span>다시 잡을 예약 <b>${left}</b>건</span>`:''}`;
+  const ids=new Set(cs.map(c=>+c.user_id));const mv=D.reservations.filter(r=>r.active&&needsMove(r)&&ids.has(+r.user_id));
+  const done=mv.filter(r=>isDone(r)).length;
+  $('prog').innerHTML=`<span>통화함 <b>${called}</b>/${cs.length}명</span><span>옮김 완료 <b>${done}</b>/${mv.length}건</span>`;
 }
-// 할 일 구분: 통화 전(첫 전화·새로 들어온 고객) / 예보 불가 / 다시 잡을 예약(멈춘 날) / 부탁 후 확인 / 주차 유형 확인
-const TASKS=[['call','통화 전'],['fc','예보 불가'],['rebook','다시 잡을 예약'],['follow','부탁 후 확인'],['lot','주차 유형 확인']];
+// 할 일 구분(누르면 그 일에 해당하는 고객만). 순서 = 급한 순서
+const TASKS=[['rebook','결빙 취소 다시 잡기'],['fc','예보 불가'],['ready','부탁 전 예약'],['follow','차비스 확인 필요'],['call','첫 전화 남음'],['lot','주차 유형 확인']];
 function taskOf(c,t){const rs=resvOf(c.user_id);const k=callOf(c.user_id);
   if(t==='call')return !k.result||k.result==='부재(다시 걸기)';
-  if(t==='fc')return rs.some(r=>!r.needs_move&&!r.canceled&&!r.lot_check&&!isDone(r)&&(fcOf(r.rid)||{}).verdict==='불가');
   if(t==='rebook')return rs.some(r=>r.canceled&&!isDone(r));
-  if(t==='follow')return rs.some(r=>{const st=moveState(r)[1];return /시간째 그대로|부탁한 시각과 다름|부탁한 뒤 바뀜/.test(st);});
+  if(t==='fc')return rs.some(r=>fcReopen(r)&&!isDone(r)&&!asked(r));
+  if(t==='ready')return k.result==='통화함'&&rs.some(r=>(r.canceled||inPanel(r))&&!isDone(r)&&/①|②|③/.test(moveState(r)[1]));
+  if(t==='follow')return rs.some(r=>/시간째 그대로|다르게 바뀜/.test(moveState(r)[1]));
   if(t==='lot')return c.lot==='확인 필요'&&!k.parking;
   return true;}
+function nextOf(c){const k=callOf(c.user_id);
+  for(const [t,l] of TASKS){if(t!=='call'&&t!=='lot'&&taskOf(c,t))return l;}
+  if(taskOf(c,'call'))return k.result==='부재(다시 걸기)'?'다시 전화':'첫 전화';
+  if(taskOf(c,'lot'))return '주차 유형 확인';
+  const p=pendingOf(c.user_id);if(p.length)return moveState(p[0])[1];
+  return '';}
 function renderChips(){
   const teams=D.me.teams;const box=$('teamchips');
   const tc=teams.length<2?'':['all',...teams].map(z=>`<button class="chip" aria-pressed="${TEAM===z}" data-z="${z}">${z==='all'?'전체':esc(teamLabel(z))}</button>`).join('');
-  // 지금 할 일별로 고객을 걸러 본다(누르면 그 일에 해당하는 고객만, 다시 누르면 전체)
   const cnt=t=>custList().filter(c=>taskOf(c,t)).length;
-  const tasks=TASKS.map(([t,l])=>{const n=cnt(t);return `<button class="chip${n?'':' zero'}" aria-pressed="${TASK===t}" data-task="${t}">${l} ${n}</button>`;}).join('');
-  box.innerHTML=tc+(TAB==='cust'?`<div class="tasks">${tasks}</div>`:'');
+  const counts=TASKS.map(([t,l])=>[t,l,cnt(t)]);
+  const today=counts.filter(x=>x[2]).map(x=>`${x[1]} ${x[2]}`).join(' → ');
+  const tasks=counts.map(([t,l,n])=>`<button class="chip${n?'':' zero'}" aria-pressed="${TASK===t}" data-task="${t}">${l} ${n}</button>`).join('');
+  box.innerHTML=tc+(TAB==='cust'?`<p class="today">${today?`오늘 할 일(위에서부터): ${today}`:'지금 남은 할 일이 없습니다'}</p><div class="tasks">${tasks}</div>`:'');
   box.querySelectorAll('button[data-z]').forEach(b=>b.onclick=()=>{TEAM=b.dataset.z;render();});
   box.querySelectorAll('button[data-task]').forEach(b=>b.onclick=()=>{TASK=TASK===b.dataset.task?'':b.dataset.task;render();window.scrollTo(0,0);});
 }
@@ -271,150 +308,178 @@ function render(){
 const OPT={
   result:['통화함','부재(다시 걸기)','거절','연락 안 됨(문자 보냄)'],
   parking:['','지상 야외','지하','필로티','기계식','모름'],
-  sun:['','오전','낮','오후','상시 그늘'],
-  indoor_move:['','가능','불가'],
 };
+// 1주 뒤에도 못 할 때(확정 문서 대안 표): 컨시어지 탁송 / SA급 세차장(회사 부담, 고객이 직접 감) / 그 밖 1주 더 미룸
 function altOpts(c){
   if(c.ticket==='컨시어지 케어')return ['','탁송 동의','거절'];
-  // 확정 문서 대안 표: ①컨시어지 탁송 ②SA급·고단가 고객 세차장(회사 부담, 고객이 직접 감) ③그 밖 1주 더 미룸
-  if(c.car_class==='SA급')return ['','세차장 방문 가능','거절'];
-  return ['해당 없음(1주 더 미룸)','세차장 방문 가능(고단가 상품 고객)','거절'];
+  if(c.car_class==='SA급')return ['','세차장 방문 동의','거절'];
+  return null;
 }
 function sel(name,opts,val,uid,label){return `<label class="f">${label}<select data-uid="${uid}" data-k="${name}">${opts.map(o=>`<option value="${esc(o)}" ${o===(val||'')?'selected':''}>${o?esc(o):'선택'}</option>`).join('')}</select></label>`;}
+// 말로 읽는 시각: 16시 → 오후 4시
+const SAY={8:'오전 8시',10:'오전 10시',12:'낮 12시',14:'오후 2시',16:'오후 4시',18:'오후 6시',20:'저녁 8시'};
+const sayH=h=>SAY[+h]||`${+h}시`;
+const sayK=k=>`${fmtDate(k.slice(0,10))} ${sayH(k.slice(11,13))}`;
 
+// 빈 시각 후보: 같은 담당 먼저(칸), 담당을 바꿔도 된다고 하면 같은 팀 다른 담당(접힘). 같은 고객의 다른 예약이 이미 고른 칸은 뺀다
 function candBox(r){
   const cd=CAND.get(+r.rid);const m=moveOf(r.rid);
-  if(!cd)return `<div class="row"><button class="btn ghost sm" data-cand="${r.rid}">옮길 수 있는 시각 보기</button></div>`;
-  if(cd.loading)return '<p class="note">빈 칸을 찾는 중…</p>';
-  if(cd.error)return `<p class="note">후보를 못 불러왔습니다: ${esc(cd.error)} <button class="btn ghost sm" data-cand="${r.rid}">다시</button></p>`;
+  if(!cd||cd.loading)return '<p class="note">빈 시각을 찾는 중…</p>';
+  if(cd.error)return `<p class="note">빈 시각을 못 불러왔습니다: ${esc(cd.error)} <button class="btn ghost sm" data-cand="${r.rid}">다시</button></p>`;
+  const taken=new Set(resvOf(r.user_id).filter(x=>+x.rid!==+r.rid).map(x=>{const mm=moveOf(x.rid);return mm.target_hour?slotKey(mm.target_date||x.kst.slice(0,10),mm.target_hour)+'|'+(mm.new_tech_id||x.did||''):'';}));
   const pick=(d,h,did)=>m.target_date===d&&m.target_hour===h+'시'&&(+m.new_tech_id||0)===(+did||0);
-  const chip=(x,did,name)=>`<button data-pick="${r.rid}" data-d="${x.date}" data-h="${x.hour}" data-did="${did||''}" data-name="${esc(name||'')}" aria-pressed="${pick(x.date,x.hour,did)}">${fmtDate(x.date)} ${x.hour}시${name?' · '+esc(name):''}</button>`;
-  const same=cd.same.length?cd.same.map(x=>chip(x)).join(''):'<span class="note">이 기간엔 빈 칸이 없습니다</span>';
-  const other=cd.other.length?cd.other.map(x=>chip(x,x.did,x.name)).join(''):'<span class="note">이 기간엔 빈 칸이 없습니다</span>';
-  return `<div class="cand"><p class="note">${fmtDate(cd.from)}–${fmtDate(cd.to)} 사이 빈 칸입니다(가까운 날 먼저). 지금 기준이고, 차비스가 실행 직전에 다시 확인합니다.</p>
-    <p class="sub">같은 담당(${esc(r.tech)})</p><div class="seg">${same}</div>
-    <p class="sub">같은 팀 다른 담당 · 담당을 바꿔도 되는 고객만</p><div class="seg">${other}</div>
-    <div class="row"><button class="btn ghost sm" data-cand="${r.rid}">후보 새로 보기</button></div></div>`;
+  let sameL=cd.same,otherL=cd.other;
+  if(r.canceled){const wk=Date.parse(r.kst.slice(0,10)+'T00:00:00Z')+7*864e5;const dist=x=>Math.abs(Date.parse(x.date+'T00:00:00Z')-wk);
+    sameL=[...cd.same].sort((a,b)=>dist(a)-dist(b)||a.date.localeCompare(b.date));otherL=[...cd.other].sort((a,b)=>dist(a)-dist(b)||a.date.localeCompare(b.date));}
+  const chip=(x,did,name)=>taken.has(slotKey(x.date,x.hour)+'|'+(did||r.did||''))?'':`<button data-pick="${r.rid}" data-d="${x.date}" data-h="${x.hour}" data-did="${did||''}" data-name="${esc(name||'')}" aria-pressed="${pick(x.date,x.hour,did)}">${fmtDate(x.date)} ${sayH(x.hour)}${name?' · '+esc(name):''}</button>`;
+  const same=sameL.length?sameL.map(x=>chip(x)).join(''):'<span class="note">이 기간엔 지금 담당의 빈 시각이 없습니다. 아래 다른 담당을 보세요</span>';
+  const other=otherL.length?otherL.map(x=>chip(x,x.did,x.name)).join(''):'<span class="note">빈 시각이 없습니다</span>';
+  const otherOpen=!cd.same.length||!!m.new_tech_id;
+  return `<p class="lab">지금 담당(${esc(r.tech)})의 빈 시각 · ${r.canceled?'1주 뒤에 가까운 날부터':'가까운 날부터'}</p><div class="seg">${same}</div>
+    <details class="more" ${otherOpen?'open':''}><summary>담당을 바꿔도 된다고 하면: 같은 팀 다른 담당 빈 시각</summary><div class="seg">${other}</div></details>`;
 }
 function moveCtl(r){
-  if(r.canceled&&isDone(r)){const m=moveOf(r.rid);const [cls,txt]=moveState(r);
-    return `<div class="mv"><div class="mvh"><span>취소된 ${fmtKst(r.kst)} · ${techLabel(r)}${r.rebook_rid?` → 새 예약 ${fmtKst(r.rebook_kst)}`:` · ${esc(m.skip)}`}</span><span class="st ${cls}">${txt}${m.skip?` <button class="linkbtn" data-unskip="${r.rid}">되돌리기</button>`:''}</span></div></div>`;}
-  if(isDone(r)){const [cls,txt]=moveState(r);return `<div class="mv"><div class="mvh"><span>${fmtKst(r.orig_kst!==r.kst?r.orig_kst:r.kst)}${r.orig_kst!==r.kst?' → '+fmtKst(r.kst):''} · ${techLabel(r)}</span><span class="st ${cls}">${txt}</span></div></div>`;}
-  if(r.needs_move&&r.moved){const [cls,txt]=moveState(r);return `<div class="mv"><div class="mvh"><span>${fmtKst(r.orig_kst)} → ${fmtKst(r.kst)} · ${techLabel(r)}</span><span class="st ${cls}">${txt}</span></div></div>`;}
-  const m=moveOf(r.rid);const [cls,txt]=moveState(r);const td=m.target_date||r.kst.slice(0,10);
-  const con=m.target_hour?`<div class="seg"><button data-consent="${r.rid}" aria-pressed="${!!m.consent_date}">${m.consent_date?`고객 동의함 (${fmtDate(m.consent_date)} 통화)`:'고객이 이 날짜·시각에 동의함'}</button></div>`:'';
-  const who=m.target_hour?(m.new_tech_id?`<p class="note">담당: ${esc(r.tech)} → <b>${esc(m.new_tech)}</b>로 바꿈 <button class="btn ghost sm" data-orig="${r.rid}">원래 담당으로</button></p>`
-    :`<div class="seg"><button data-flex="${r.rid}" aria-pressed="${!!m.tech_flex}">${m.tech_flex?'담당 바꿔도 됨(같은 팀 안에서)':'담당 그대로 · 바꿔도 되면 누르기'}</button></div>`):'';
-  const why=r.canceled?`<p class="note">회사 사정(결빙·날씨 등)으로 ${r.canceled_kst?fmtKst(r.canceled_kst).replace(/시$/,'시')+'에 ':''}취소된 회차입니다. 세차권은 고객에게 돌아갔습니다. 1주 뒤 낮(10·12·14시)을 먼저 권하고, 정한 칸으로 새 예약을 부탁합니다. <button class="btn ghost sm" data-skip="${r.rid}">다시 안 잡음</button></p>`
-    :r.needs_move?'':`<p class="note">날씨 때문에 옮기는 10·12·14시 예약입니다${!m.target_hour?` <button class="btn ghost sm" data-close="${r.rid}">안 옮김</button>`:''}</p>`;
+  const m=moveOf(r.rid);const [cls,txt]=moveState(r);
+  if(r.canceled&&isDone(r))return `<div class="mv"><div class="mvh"><span>취소된 ${fmtKst(r.kst)} · ${techLabel(r)}${r.rebook_rid?` → 새 예약 ${fmtKst(r.rebook_kst)}`:` · ${esc(m.skip)}`}</span><span class="st ${cls}">${txt}${m.skip?` <button class="linkbtn" data-unskip="${r.rid}">되돌리기</button>`:''}</span></div></div>`;
+  if(isDone(r))return `<div class="mv"><div class="mvh"><span>${r.orig_kst!==r.kst?fmtKst(r.orig_kst)+' → ':''}${fmtKst(r.kst)} · ${techLabel(r)}</span><span class="st ${cls}">${txt}</span></div></div>`;
+  if(/다르게 바뀜/.test(txt))return `<div class="mv"><div class="mvh"><span>${fmtKst(r.kst)} · ${techLabel(r)}</span><span class="st need">${txt}</span></div>
+    <p class="note">고객이 동의한 ${fmtDate(m.req_date||'')} ${sayH(m.req_hour||'')}과 다르게 바뀌었습니다. 고객에게 지금 시각(${sayK(r.kst)})을 전화로 알리고 누르세요. <button class="btn ghost sm" data-ack="${r.rid}">고객에게 알림 · 확인함</button></p></div>`;
+  const busy=asked(r);
+  const defDate=r.canceled?(()=>{const d=new Date(Date.parse(r.kst.slice(0,10)+'T00:00:00Z')+7*864e5).toISOString().slice(0,10);return d<kstToday()?kstToday():d;})():r.kst.slice(0,10);
+  const td=m.target_date||defDate;
+  const head=r.canceled?`<p class="note">${r.canceled_kst?fmtKst(r.canceled_kst)+'에 ':''}회사 사정으로 취소된 회차(결빙·날씨 등). 세차권은 고객에게 돌아갔습니다. 1주 뒤 낮을 먼저 권합니다. <button class="btn ghost sm" data-skip="${r.rid}">다시 안 잡음</button></p>`
+    :needsMove(r)?'':`<p class="note">날씨 때문에 옮길지 정하는 예약입니다${!m.target_hour?` <button class="btn ghost sm" data-close="${r.rid}">안 옮김(그대로 진행)</button>`:''}</p>`;
+  const who=m.target_hour&&!m.new_tech_id?`<p class="lab">담당을 바꿔도 된다고 하셨나요?</p><div class="seg"><button data-flexv="0" data-rid2="${r.rid}" aria-pressed="${!m.tech_flex}">아니요(지금 담당)</button><button data-flexv="1" data-rid2="${r.rid}" aria-pressed="${!!m.tech_flex}">네(같은 팀 누구든)</button></div>`
+    :m.new_tech_id?`<p class="note">담당: ${esc(r.tech)} → <b>${esc(m.new_tech)}</b> <button class="btn ghost sm" data-orig="${r.rid}">지금 담당으로 되돌리기</button></p>`:'';
+  const con=m.target_hour?`<div class="seg"><button class="consent" data-consent="${r.rid}" aria-pressed="${!!m.consent_date}">${m.consent_date?`고객 동의함 (${fmtDate(m.consent_date)} 통화)`:'고객이 이 날짜·시각에 동의함'}</button></div>`:'';
   return `<div class="mv" data-mv="${r.rid}">
     <div class="mvh"><span>${r.canceled?'취소된 ':''}${fmtKst(r.kst)} · ${techLabel(r)}${r.canceled?'':fcBadge(r)}</span><span class="st ${cls}">${txt}</span></div>
-    ${why}${candBox(r)}
-    <p class="note">직접 고르기</p>
-    <div class="row"><label class="f">${r.canceled?'새 예약 날짜':'옮길 날짜'}<input type="date" data-rid="${r.rid}" data-k="target_date" value="${esc(td)}" min="${kstToday()}" max="2027-03-14"></label>
-    <div class="seg" role="group" aria-label="옮길 시각">${['10시','12시','14시'].map(h=>`<button data-rid="${r.rid}" data-hour="${h}" aria-pressed="${m.target_hour===h}">${h}</button>`).join('')}</div></div>
-    ${who}${con}
+    ${head}
+    ${busy?'':candBox(r)}
+    ${busy?'':`<details class="more"><summary>후보에 없는 시각 직접 넣기</summary><div class="row"><label class="f">${r.canceled?'새 예약 날짜':'옮길 날짜'}<input type="date" data-rid="${r.rid}" data-k="target_date" value="${esc(td)}" min="${kstToday()}" max="2027-03-14"></label>
+    <div class="seg" role="group" aria-label="시각">${['10시','12시','14시'].map(h=>`<button data-rid="${r.rid}" data-hour="${h}" aria-pressed="${m.target_hour===h&&!m.new_tech_id}">${sayH(parseInt(h))}</button>`).join('')}</div></div></details>`}
+    ${busy?'':who+con}
   </div>`;
 }
-// 부탁할 수 있는 것(시각·동의 있고 아직 안 부탁함), 동의가 빠진 것, 부탁 후 오래 그대로인 것
+// 4에 올릴 것: 동의까지 끝났고 아직 안 부탁한 것 / 동의가 빠진 것 / 부탁 후 오래 그대로인 것
 function custReq(c){
-  const rs=resvOf(c.user_id).filter(r=>(inPanel(r)||r.canceled)&&!isDone(r)&&!(r.needs_move&&r.moved));
-  const ready=[],missing=[],stale=[];
-  rs.forEach(r=>{const m=moveOf(r.rid);
+  const rs=pendingOf(c.user_id);const ready=[],missing=[],stale=[];
+  rs.forEach(r=>{const m=moveOf(r.rid);const st=moveState(r)[1];
+    if(/다르게 바뀜/.test(st))return;
     if(asked(r)){if(moveState(r)[0]==='need')stale.push(r);return;}
     if(m.target_hour&&m.consent_date)ready.push(r);else missing.push(r);});
   return {ready,missing,stale};
 }
-function reqLine(r){const m=moveOf(r.rid);return (r.canceled?`취소된 예약 ${r.rid}번(${fmtKst(r.kst)}) → 새 예약 ${fmtDate(m.target_date||r.kst.slice(0,10))} ${m.target_hour}`:`예약 ${r.rid}번 ${fmtKst(r.kst)} → ${fmtDate(m.target_date||r.kst.slice(0,10))} ${m.target_hour}`)+(m.new_tech_id?` · 담당 ${m.new_tech}로`:m.tech_flex?' · 담당 바꿔도 됨':' · 담당 그대로')+(r.needs_move?'':' (날씨)');}
-// ── 고객별 전화 대본: 이름·팀장·예약 시각·후보 칸·상품별 질문을 채워서 카드 안에 보여 준다 ──
-function suggest(r){const cd=CAND.get(+r.rid);if(!cd||!cd.same)return '';
-  let xs=[...cd.same.map(x=>({...x})),...cd.other.map(x=>({...x}))];
-  if(r.canceled){const wk=new Date(Date.parse(r.kst.slice(0,10)+'T00:00:00Z')+5*864e5).toISOString().slice(0,10);const later=xs.filter(x=>x.date>=wk);if(later.length)xs=later;}
-  const two=xs.slice(0,2).map(x=>`${fmtDate(x.date)} ${x.hour}시`);return two.length===2?`${two[0]}나 ${two[1]}`:two[0]||'';}
+function reqLine(r){const m=moveOf(r.rid);const to=`${fmtDate(m.target_date||r.kst.slice(0,10))} ${sayH(parseInt(m.target_hour))}`;
+  return (r.canceled?`새 예약 ${to} (취소된 ${fmtKst(r.kst)} 대신)`:`${sayK(r.kst)} → ${to}`)+(m.new_tech_id?` · 담당 ${m.new_tech}로`:m.tech_flex?' · 담당 바꿔도 됨':' · 담당 그대로');}
+
+// ── 고객별 전화 대본: 이름·팀장·예약 시각·빈 시각·상품별 질문을 채워서 보여 준다 ──
+function sugg(r){const cd=CAND.get(+r.rid);if(!cd||!cd.same)return [];
+  let xs=cd.same.slice();const base=r.kst.slice(0,10);
+  if(needsMove(r)){const sd=xs.filter(x=>x.date===base);xs=[...sd,...xs.filter(x=>x.date!==base)];}
+  if(r.canceled){const wk=new Date(Date.parse(base+'T00:00:00Z')+7*864e5).toISOString().slice(0,10);const later=xs.filter(x=>x.date>=wk);if(later.length)xs=later;}
+  return xs.slice(0,2);}
+function offer(r){const xs=sugg(r);if(!xs.length)return null;
+  const allSame=xs.every(x=>x.date===r.kst.slice(0,10));
+  const t=xs.map(x=>allSame?sayH(x.hour):`${fmtDate(x.date)} ${sayH(x.hour)}`);
+  return {allSame,text:t.length===2?`${t[0]}나 ${t[1]}`:t[0],one:t.length===1};}
 const Q=t=>`<li class="say">“${t}”</li>`;
 const DO=t=>`<li class="do">${t}</li>`;
 function scriptFor(c){
   const me=esc(D.me.isAdmin?(D.leaders[c.team]||'○○○'):D.me.name);const rs=resvOf(c.user_id);const k=callOf(c.user_id);
-  const cx=rs.filter(r=>r.canceled&&!isDone(r)),mv=rs.filter(r=>inPanel(r)&&!isDone(r)&&!(r.needs_move&&r.moved));
-  const keep=rs.filter(r=>!inPanel(r)&&!r.canceled&&!r.lot_check);
-  const want=[...cx,...mv].some(r=>!CAND.get(+r.rid));
-  const sg=r=>suggest(r)||'○일 ○시';
-  const L=[];
+  const cx=rs.filter(r=>r.canceled&&!isDone(r)),mv=rs.filter(r=>inPanel(r)&&!isDone(r)&&!asked(r));
+  const keep=rs.filter(r=>!r.canceled&&!inPanel(r)&&outdoorOK(r));
+  const L=[];const blank='(빈 시각을 불러오는 중)';
   L.push(Q(`안녕하세요, ${esc(c.name)} 고객님. 카라멜 ${esc(c.team)}팀 팀장 ${me}입니다. 겨울 세차 일정 때문에 연락드렸어요.`));
-  if(c.lot==='확인 필요'){L.push(Q('차는 보통 지하 주차장에 세우세요, 아니면 지상에 세우세요?'));
-    L.push(DO('지하·실내 → "실내는 지금처럼 진행돼요. 혹시 주차 위치가 바뀌면 알려 주세요." 하고 ①주차 위치에 "지하". 여기서 끝'));
-    L.push(DO('지상·야외 → ①주차 위치에 "지상 야외"를 고르고 아래로 이어서'));}
-  if(cx.length)cx.forEach(r=>L.push(Q(`${fmtKst(r.kst)} 세차는 날이 추워 진행하지 못해서 죄송해요. 세차권은 돌려드렸고요, ${sg(r)} 중에 편하신 때로 다시 잡아 드릴게요.`)));
-  else L.push(Q('겨울에는 차 표면에 물이 얼면 닦아낼 수 없고, 억지로 닦으면 흠집이 생겨요. 그래서 2월까지 밖에 세워 두신 차는 낮 10시, 12시, 2시에만 세차를 시작해요.'));
-  mv.forEach(r=>{const f=fcOf(r.rid);
-    if(r.needs_move)L.push(Q(`${fmtKst(r.kst)} 예약을 같은 날 낮으로 옮겨 드리려고 하는데, ${sg(r)} 어떠세요?`));
-    else L.push(Q(`${fmtKst(r.kst)} 세차는 그날 ${f&&/눈/.test(f.detail)?'눈':'영하'} 예보가 있어서요, ${sg(r)} 중에 다른 날 낮으로 옮겨 드려도 될까요?`));});
-  if(keep.length)L.push(Q(`${keep.slice(0,3).map(r=>fmtKst(r.kst)).join(', ')}${keep.length>3?` 외 ${keep.length-3}건`:''} 예약은 지금 시간 그대로 진행해요.`));
-  L.push(Q('다만 영하로 내려가거나 눈이 오면 못 할 수 있어요. 그 주 월요일에 미리 연락드리고, 당일에도 다시 연락드릴게요.'));
-  L.push(DO('물어보기: 차를 어디에 세우는지(①) · 세차하는 날 실내로 옮겨 둘 수 있는지(②)'));
-  if(c.ticket==='컨시어지 케어')L.push(Q('혹시 1주 뒤에도 날씨 때문에 못 하게 되면, 저희가 차를 옮겨서 실내에서 해 드려도 될까요? 비용은 저희가 부담해요.')+DO('답을 ③에'));
-  else if(c.car_class==='SA급')L.push(Q('혹시 1주 뒤에도 날씨 때문에 못 하게 되면, 저희가 세차장을 잡아 둘 테니 직접 오셔서 기다려 주실 수 있을까요? 비용은 저희가 부담해요.')+DO('답을 ③에'));
-  if([...cx,...mv].length)L.push(c.ticket==='컨시어지 케어'?Q('바뀐 일정은 말씀드린 날짜·시각으로 확정해 두겠습니다.')+DO('컨시어지는 카카오톡 알림이 안 가니 통화에서 확정')
+  if(c.lot==='확인 필요'&&!OUTDOOR_ANS.includes(k.parking||'')){
+    L.push(Q('차는 보통 지하 주차장에 세우세요, 아니면 지상에 세우세요?'));
+    L.push(DO('지하·실내 → "실내는 지금처럼 진행해요. 아주 추운 날엔 미리 연락드릴 수 있어요." → 2에서 ①주차 위치 "지하". 여기서 끝'));
+    L.push(DO('지상·야외 → 2에서 ①주차 위치 "지상 야외"를 고르면 아래 3에 옮길 예약이 생깁니다. 이어서 아래 대본'));
+    L.push(DO('기계식이면 "실내 타워형인가요, 밖에 있는 기계식인가요?" → 실내면 지하, 밖이면 지상 야외'));}
+  cx.forEach(r=>{const o=offer(r);L.push(Q(`${sayK(r.kst)} 세차는 그날 날씨 때문에 진행하지 못해서 죄송해요. 세차권은 그대로 돌려드렸고요, ${o?o.text+(o.one?' 괜찮으세요?':' 중에 편하신 때로 다시 잡아 드릴게요.'):blank}`));});
+  if(cx.length)L.push(DO('취소 이유는 #caramel_실시간 알림을 보고 말합니다. 결빙이면 "차 표면에 물이 얼어서 닦으면 흠집이 생길 수 있어서요"'));
+  const nm=mv.filter(needsMove),fc=mv.filter(r=>!needsMove(r));
+  if(nm.length||!cx.length)L.push(Q('겨울에는 차 표면에 물이 얼면 닦아낼 수 없고, 억지로 닦으면 흠집이 생겨요. 그래서 2월까지 밖에 세워 두신 차는 낮 10시, 12시, 오후 2시에만 세차를 시작해요.'));
+  nm.forEach(r=>{const o=offer(r);
+    L.push(Q(!o?`${sayK(r.kst)} 예약을 같은 날 낮으로 옮겨 드리려고 하는데요, ${blank}`
+      :o.allSame?`${sayK(r.kst)} 예약을 같은 날 ${o.text}${o.one?'로 옮겨 드려도 될까요?':' 중에 옮겨 드리려고 하는데 어느 쪽이 편하세요?'}`
+      :`${sayK(r.kst)} 예약은 같은 날 낮이 차 있어서요, ${o.text}${o.one?' 괜찮으세요?':' 중에 괜찮으신 때 있으세요?'}`));});
+  fc.forEach(r=>{const f=fcOf(r.rid);const o=offer(r);
+    L.push(Q(`${sayK(r.kst)} 세차는 그날 ${f&&/눈/.test(f.detail)?'눈':'영하'} 예보가 있어서 차 표면이 얼 수 있어요. 그대로 두시면 당일 현장에서 최대한 해 보고, 원하시면 ${o?o.text:blank}로 옮겨 드릴 수 있어요. 어느 쪽이 편하세요?`));
+    L.push(DO('그대로 두겠다고 하면 → 3에서 [안 옮김(그대로 진행)]'));});
+  if(keep.length)L.push(Q(`${keep.slice(0,3).map(r=>sayK(r.kst)).join(', ')}${keep.length>3?` 외 ${keep.length-3}건`:''} 예약은 지금 시간 그대로 진행해요.`));
+  L.push(Q('다만 영하로 내려가거나 눈이 오면 못 할 수 있어요. 그 주에 날씨를 보고 미리 연락드릴게요.'));
+  if(!k.parking&&c.lot!=='확인 필요')L.push(DO('물어보기: 차를 어디에 세우는지 → 2의 ①주차 위치'));
+  if(altOpts(c)&&!k.alt_intent){
+    if(c.ticket==='컨시어지 케어')L.push(Q('혹시 1주 뒤에도 날씨 때문에 못 하게 되면, 저희가 차를 옮겨서 실내에서 해 드려도 될까요? 비용은 저희가 부담해요.')+DO('답은 2의 ③'));
+    else L.push(Q('혹시 1주 뒤에도 날씨 때문에 못 하게 되면, 저희가 세차장을 잡아 둘 테니 직접 오셔서 기다려 주실 수 있을까요? 비용은 저희가 부담해요.')+DO('답은 2의 ③'));}
+  if(cx.length||mv.length)L.push(c.ticket==='컨시어지 케어'?Q('바뀐 일정은 지금 말씀드린 날짜·시각으로 확정해 두겠습니다.')+DO('컨시어지는 카카오톡 알림이 안 가니 통화에서 확정')
     :Q('바뀐 일정은 카카오톡 「예약 확정 안내」로 받으실 거예요.'));
-  L.push(DO('끝나면: 통화 결과 → 정한 칸 누르기 → "고객이 이 날짜·시각에 동의함" → [차비스에게 부탁하기]'));
-  const hint=want?`<p class="note">아래 [옮길 수 있는 시각 보기]를 먼저 누르면 "○일 ○시" 자리에 빈 칸 두 개가 채워집니다. <button class="btn ghost sm" data-candall="${c.user_id}">빈 칸 한꺼번에 불러오기</button></p>`:'';
-  return `<details class="script" ${k.result?'':'open'}><summary>이 고객 전화 대본</summary>${hint}<ul>${L.join('')}</ul>
-    <p class="note">하지 않는 말: "밖에서 세차 안 해요" · "겨울엔 원래 못 해요" · "날씨 상관없이 해 드릴게요"</p></details>`;
+  L.push(DO('통화가 끝나면: 2 통화 결과 → 3 고객이 고른 시각 누르기 → 동의 → 4 [차비스에게 부탁하기]'));
+  return `<details class="script" ${k.result==='통화함'?'':'open'}><summary>이 고객 전화 대본</summary><ul>${L.join('')}</ul>
+    <p class="note">하지 않는 말: "밖에서 세차 안 해요" · "겨울엔 원래 못 해요" · 가 보기 전에 "아마 못 할 거예요" · "날씨 상관없이 해 드릴게요"</p></details>`;
+}
+const step=(n,t,extra='')=>`<h3 class="step"><span class="n">${n}</span>${t}${extra}</h3>`;
+function cardBody(c){
+  const k=callOf(c.user_id);const rs=resvOf(c.user_id);const called=k.result==='통화함';
+  const cx=rs.filter(r=>r.canceled);const mv=rs.filter(inPanel);
+  const keepRs=rs.filter(r=>!r.canceled&&!inPanel(r));
+  const q=custReq(c);const open=pendingOf(c.user_id);
+  const lotWait=c.lot==='확인 필요'&&!OUTDOOR_ANS.includes(k.parking||'');
+  // 1 전화
+  const s1=`${step(1,'전화')}
+    <div class="meta">${esc(c.cars)}<br>${esc(c.building||'건물명 없음')} · 주차 ${esc(lotLabel(c.lot))}</div>
+    ${c.lot==='확인 필요'?`<div class="clue"><b>주차 유형 확인 필요</b> · 전화 전에 짐작해 보세요<ul>
+      <li>주소: ${esc(c.addr||'없음')} ${c.addr?`<a class="maplink" href="https://map.naver.com/p/search/${encodeURIComponent(c.addr)}" target="_blank" rel="noopener">네이버지도</a>`:''}</li>
+      <li>고객 주차 메모: ${esc(c.park_memo||'없음')}</li><li>지난 해피콜 주차 기록: ${esc(c.hp_parking||'없음')}</li><li>같은 건물 다른 고객: ${esc(c.same_bldg||'없음')}</li></ul></div>`:''}
+    ${historyBox(c)}
+    ${scriptFor(c)}
+    <div class="row"><a class="call" href="tel:${esc(String(c.phone).replace(/-/g,''))}">전화 걸기</a><span class="phone">${esc(c.phone)}</span></div>`;
+  // 2 통화 결과
+  const alt=altOpts(c);
+  const s2=`${step(2,'통화 결과')}
+    <div class="seg" role="group" aria-label="통화 결과">${OPT.result.map(o=>`<button data-uid="${c.user_id}" data-res="${esc(o)}" aria-pressed="${k.result===o}">${esc(o)}</button>`).join('')}</div>
+    ${k.result==='부재(다시 걸기)'?'<p class="note">1시간 뒤 한 번 더 → 그래도 안 받으면 "전화드렸는데 연결이 안 돼서요, 편하실 때 연락 주세요" 문자 → \'연락 안 됨(문자 보냄)\'</p>':''}
+    <div class="row">${sel('parking',OPT.parking,k.parking,c.user_id,'①주차 위치')}
+    ${alt?sel('alt_intent',alt,k.alt_intent,c.user_id,'③1주 뒤도 못 하면 (회사 부담)'):'<p class="note" style="flex:1 1 140px">③1주 뒤도 못 하면: 1주 더 미룸</p>'}</div>
+    <label class="f">메모 (칸 밖을 누르면 저장)<textarea data-uid="${c.user_id}" data-k="memo" rows="1">${esc(k.memo||'')}</textarea></label>
+    <span class="saved" id="s${c.user_id}" ${k.updated_at?'':'hidden'}>${k.updated_at?'저장됨 '+new Date(k.updated_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):''}</span>`;
+  // 3 예약 정하기
+  const keepHtml=keepRs.length?`<details class="more"><summary>시간은 괜찮은 예약 ${keepRs.length}건 (이미 10·12·14시)</summary><div class="resv">${keepRs.map(r=>`<div><span>${fmtKst(r.kst)} · ${techLabel(r)}${fcBadge(r)}</span><span class="st ok">${outdoorOK(r)?`<button class="linkbtn" data-open="${r.rid}">날씨로 옮기기</button>`:'그대로'}</span></div>`).join('')}</div>
+    <p class="note">예보가 '애매'이거나 고객이 날을 바꾸고 싶어 하면 [날씨로 옮기기]</p></details>`:'';
+  let s3body='';
+  if(lotWait&&rs.some(r=>r.lot_check&&badHour(r)))s3body+=`<p class="note">이 고객의 ${rs.filter(r=>r.lot_check&&badHour(r)).map(r=>sayK(r.kst)).join(', ')} 예약은 주차 위치를 확인한 뒤 정합니다. 2에서 ①주차 위치를 "지상 야외"로 고르면 여기서 바로 옮길 수 있습니다.</p>`;
+  if(!called&&open.length)s3body+=`<p class="note">2에서 '통화함'을 누르면 시각을 고를 수 있습니다.</p>${open.map(r=>`<div class="mvh"><span>${r.canceled?'취소된 ':''}${fmtKst(r.kst)} · ${techLabel(r)}${r.canceled?'':fcBadge(r)}</span><span class="st need">${r.canceled?'다시 잡을 예약':'옮길 예약'}</span></div>`).join('')}${[...cx,...mv].filter(isDone).map(moveCtl).join('')}`;
+  else s3body+=[...cx,...mv].map(moveCtl).join('');
+  if(open.length&&c.ticket==='컨시어지 케어')s3body+='<p class="note">컨시어지는 옮겨도 카카오톡 알림이 안 갑니다. 통화에서 날짜·시각을 확정하세요.</p>';
+  const s3=(cx.length||mv.length||keepRs.length||s3body)?`${step(3,'예약 정하기',open.length?` <span class="cnt">${open.length}건 남음</span>`:'')}${s3body||(keepRs.length?'<p class="note">옮길 예약이 없습니다.</p>':'')}${keepHtml}`:'';
+  // 4 차비스에게 부탁
+  let s4='';
+  const links=open.filter(asked).map(r=>moveOf(r.rid).slack_ts).filter(Boolean).map((ts,i,a)=>`<a class="slk" href="https://trydrive.slack.com/archives/C0A9F7H5M0E/p${String(ts).replace('.','')}" target="_blank" rel="noopener">슬랙 글${a.length>1?' '+(i+1):''} 열기</a>`).join(' ');
+  if(called&&(q.ready.length||q.stale.length||links)){
+    s4=step(4,'차비스에게 부탁');
+    if(q.ready.length)s4+=`<div class="req">${q.ready.map(r=>esc(reqLine(r))).join('<br>')}</div>
+      <div class="row"><button class="btn" data-ask="${c.user_id}">차비스에게 부탁하기 (${q.ready.length}건)</button></div>
+      <p class="rule">#caramel_팀장 글 스레드의 차비스 카드에서 [실행]. '그래도 실행' 버튼만 있으면 [안 함] 누르고 고객에게 다시 전화</p>
+      <details class="more"><summary>자세히</summary><p class="note">예약마다 글이 하나씩 올라갑니다. 팀장님이 [실행]을 안 누르면 운영팀이 12·15·18시에 처리합니다. 누르지 않는 버튼: [겹쳐도 실행]·[휴무여도 실행]·[근무시간 밖이어도 실행]·[상한 넘겨 실행].${q.missing.length?` 동의를 안 누른 ${q.missing.length}건은 이번에 빠집니다.`:''}</p></details>`;
+    if(q.stale.length)s4+=`<div class="row"><button class="btn ghost" data-ask="${c.user_id}" data-again="1">차비스에게 다시 부탁하기 (${q.stale.length}건)</button></div>
+      <p class="note">다시 부탁하기 전에 슬랙의 예전 차비스 카드에 [안 함]을 눌러 주세요. 두 카드가 다 실행되면 고객에게 알림이 두 번 갑니다.</p>`;
+    if(links)s4+=`<div class="row">${links}</div>`;
+  }
+  return `<section class="s">${s1}</section><section class="s">${s2}</section>${s3?`<section class="s">${s3}</section>`:''}${s4?`<section class="s">${s4}</section>`:''}`;
 }
 function viewCust(){
   let cs=custList();if(TASK)cs=cs.filter(c=>taskOf(c,TASK));
   if(!cs.length)return '<p class="empty">해당하는 고객이 없습니다</p>';
   return '<div class="list">'+cs.map(c=>{
-    const k=callOf(c.user_id);const rs=resvOf(c.user_id);
-    const mv=rs.filter(inPanel);const cx=rs.filter(r=>r.canceled);
-    const keepRs=rs.filter(r=>!inPanel(r)&&!r.canceled);
-    const keep=keepRs.map(r=>`<div><span>${fmtKst(r.kst)} · ${techLabel(r)}${fcBadge(r)}</span><span class="st ok">${r.lot_check?'그대로':`<button class="linkbtn" data-open="${r.rid}">추워서 못 하면 옮기기</button>`}</span></div>`).join('');
-    const q=custReq(c);const open=[...cx,...mv].filter(r=>!isDone(r)&&!(r.needs_move&&r.moved));
-    const links=open.filter(asked).map(r=>moveOf(r.rid).slack_ts).filter(Boolean).map((ts,i,a)=>`<a class="note" href="https://trydrive.slack.com/archives/C0A9F7H5M0E/p${String(ts).replace('.','')}" target="_blank" rel="noopener">슬랙 글${a.length>1?' '+(i+1):''} 보기</a>`).join(' ');
-    const called=k.result==='통화함';
-    let req='';
-    if(open.length&&!called)req=`<p class="note">통화 결과를 '통화함'으로 남긴 뒤, 예약마다 시각을 고르고 고객 동의를 누르면 차비스 부탁 버튼이 생깁니다</p>`;
-    else if(open.length){
-      if(q.ready.length)req+=`<div class="req">${q.ready.map(r=>esc(reqLine(r))).join('<br>')}</div>
-        <div class="row"><button class="btn sm" data-ask="${c.user_id}">차비스에게 부탁하기 (${q.ready.length}건)</button></div>
-        <p class="note">누르면 #caramel_팀장에 예약마다 글이 하나씩 올라가고, 그 글의 스레드에 차비스 카드가 달립니다.<br>
-        · 카드에 [실행]이 있으면 팀장님이 누릅니다. 안 누르면 운영팀 승인 시간(12·15·18시)에 운영팀이 처리합니다.<br>
-        · [겹쳐도 실행]·[휴무여도 실행]·[근무시간 밖이어도 실행]·[상한 넘겨 실행]처럼 '그래도 실행' 버튼만 있으면 누르지 않습니다. [안 함]을 누르고 고객에게 다시 전화해 다른 시각을 잡습니다.${q.missing.length?`<br>· 동의를 안 누른 ${q.missing.length}건은 이번에 빠집니다.`:''}</p>`;
-      else if(q.missing.length)req+=`<p class="note">예약마다 시각을 고르고 '고객이 이 날짜·시각에 동의함'을 누르면 부탁 버튼이 생깁니다</p>`;
-      if(q.stale.length)req+=`<div class="row"><button class="btn ghost sm" data-ask="${c.user_id}" data-again="1">차비스에게 다시 부탁하기 (${q.stale.length}건)</button></div>
-        <p class="note">다시 부탁하기 전에 슬랙의 예전 차비스 카드에 [안 함]을 눌러 주세요. 두 카드가 다 실행되면 고객에게 알림이 두 번 갑니다.</p>`;
-      if(open.some(r=>moveState(r)[1]==='부탁한 뒤 바뀜 · 다시 부탁할 것'))req+=`<p class="note">'부탁한 뒤 바뀜'은 팀장님이 시각을 바꿨거나 고객이 앱에서 예약을 바꾼 경우입니다. 예전 카드에 [안 함]을 누르고 새 시각으로 다시 부탁합니다.</p>`;
-      if(links)req+=`<div class="row">${links}</div>`;
-    }
-    if(mv.some(r=>moveState(r)[1]==='옮겨졌지만 부탁한 시각과 다름'))req+=`<p class="note">'부탁한 시각과 다름'은 고객이 동의한 시각과 다르게 옮겨진 예약입니다. 고객에게 바뀐 시각을 전화로 알리고, 그 예약의 슬랙 글 스레드에 남겨 주세요.</p>`;
-    if(open.length&&c.ticket==='컨시어지 케어')req+=`<p class="note">컨시어지 고객은 옮겨도 카카오톡 알림이 가지 않습니다. 통화에서 바뀐 날짜·시각을 직접 확정해 주세요</p>`;
-    return `<article class="card ${k.result==='통화함'?'done':''}" id="c${c.user_id}">
-      <div class="chead"><b>${esc(c.name)}</b><span class="tag">${esc(c.ticket)} · ${esc(c.wash_kind)}<br>${esc(c.car_class)} · ${esc(teamLabel(c.team))}</span></div>
-      ${historyBox(c)}
-      <div class="meta">${esc(c.cars)}<br>${esc(c.building||'건물명 없음')} · 주차 ${esc(lotLabel(c.lot))}</div>
-      ${c.lot==='확인 필요'?`<div class="clue"><b>주차 유형 확인 필요</b> · 전화 전에 아래로 먼저 짐작해 보세요
-        <ul>
-          <li>주소: ${esc(c.addr||'없음')} ${c.addr?`<a href="https://map.naver.com/p/search/${encodeURIComponent(c.addr)}" target="_blank" rel="noopener">네이버지도</a>`:''}</li>
-          <li>고객 주차 메모: ${esc(c.park_memo||'없음')}</li>
-          <li>지난 해피콜 주차 기록: ${esc(c.hp_parking||'없음')}</li>
-          <li>같은 건물 다른 고객 등록: ${esc(c.same_bldg||'없음')}</li>
-        </ul>
-        <span class="note">확인되면 아래 ①주차 위치에 고르기. 야외면 운영팀이 주소를 고쳐 다음 날부터 예보 판정에 들어갑니다</span></div>`:''}
-      ${scriptFor(c)}
-      <div class="row"><a class="call" href="tel:${esc(String(c.phone).replace(/-/g,''))}">전화 걸기</a><span class="phone">${esc(c.phone)}</span></div>
-      ${cx.length?`<p class="sub">다시 잡을 예약 ${cx.filter(r=>!isDone(r)).length}건 · 회사 사정으로 취소됨</p>${cx.map(moveCtl).join('')}`:''}
-      ${mv.length?`<p class="sub">옮길 예약 ${mv.filter(r=>!isDone(r)&&!(r.needs_move&&r.moved)).length}건 · 10·12·14시로</p><p class="note">[옮길 수 있는 시각 보기]로 빈 칸을 보고 고객과 정합니다. 같은 날 낮을 먼저 권하고, 고객이 원하면 다른 날도 됩니다. 담당은 그대로가 기본이고, 고객이 괜찮다고 하면 같은 팀 다른 담당 칸을 골라도 됩니다.</p>${mv.map(moveCtl).join('')}`:''}${req}
-      ${keep?`<div class="resv"><p class="sub">시간은 괜찮은 예약 ${keepRs.length}건</p><p class="note">이미 10·12·14시라 시간 때문에 옮길 필요는 없습니다. 그 주 예보가 '불가'이거나 당일 추워서 못 하게 되면 그때 [추워서 못 하면 옮기기]로 다른 날을 잡습니다.</p>${keep}</div>`:''}
-      <p class="sub">통화 결과</p>
-      <div class="seg" role="group" aria-label="통화 결과">${OPT.result.map(o=>`<button data-uid="${c.user_id}" data-res="${esc(o)}" aria-pressed="${k.result===o}">${esc(o)}</button>`).join('')}</div>
-      <div class="row">${sel('parking',OPT.parking,k.parking,c.user_id,'①주차 위치')}${sel('indoor_move',OPT.indoor_move,k.indoor_move,c.user_id,'②그날 실내로 옮길 수 있나')}</div>
-      <div class="row">${sel('alt_intent',altOpts(c),k.alt_intent||(altOpts(c)[0]?altOpts(c)[0]:''),c.user_id,'③1주 뒤도 못 하면')}${sel('sun',OPT.sun,k.sun,c.user_id,'④해 드는 시간(테크니션)')}</div>
-      <label class="f">메모 (칸 밖을 누르면 저장)<textarea data-uid="${c.user_id}" data-k="memo" rows="1">${esc(k.memo||'')}</textarea></label>
-      <span class="saved" id="s${c.user_id}" ${k.updated_at?'':'hidden'}>${k.updated_at?'저장됨 '+new Date(k.updated_at).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):''}</span>
+    const nx=nextOf(c);const exp=EXP===+c.user_id;
+    return `<article class="card ${nx?'':'done'}${exp?' exp':''}" id="c${c.user_id}">
+      <button class="crow" data-exp="${c.user_id}" aria-expanded="${exp}"><span class="cname">${esc(c.name)}</span><span class="tag">${esc(c.team)} · ${esc(c.ticket)}${c.car_class==='SA급'?' · SA급':''}</span><span class="next ${nx?'':'ok'}">${nx||'할 일 없음'}</span></button>
+      ${exp?cardBody(c):''}
     </article>`;}).join('')+'</div>';
 }
 
-const REASONS=['차 표면 결빙','예보 기온 미달','바닥·보행로 결빙','눈·비','기타'];
+const REASONS=['차 표면 결빙','바닥 결빙','기타'];
 const ACTIONS=['같은 날 낮으로','1주 뒤로','탁송(컨시어지)','세차장(SA급·고단가)','취소(팀장 앱)','고객 거절','기타'];
 // 중단한 예약을 찾는다: 예약 번호가 있으면 그것, 없으면 고객 이름 + 그날 예약
 function stopResv(s){
@@ -434,7 +499,7 @@ function viewStop(){
     <div class="row"><label class="f">고객<input name="customer" list="custnames" placeholder="이름"></label><label class="f">예약 번호<input name="rid" inputmode="numeric" placeholder="있으면"></label></div>
     <datalist id="custnames">${cs.map(c=>`<option value="${esc(c.name)}">`).join('')}</datalist>
     <div class="row"><label class="f">실내/야외<select name="lot"><option>야외</option><option>실내</option></select></label><label class="f">건물<input name="building"></label></div>
-    <div class="row"><label class="f">차 표면 온도(℃)<input name="car_temp" inputmode="decimal"></label><label class="f">기온(℃)<input name="air_temp" inputmode="decimal"></label></div>
+    <div class="row"><label class="f">기온(℃, 지급 온도계)<input name="air_temp" inputmode="decimal"></label></div>
     <label class="f">중단 이유<select name="reason" required>${REASONS.map(o=>`<option>${o}</option>`).join('')}</select></label>
     <div class="row"><label class="f">처리<select name="action">${ACTIONS.map(o=>`<option>${o}</option>`).join('')}</select></label><label class="f">다시 잡은 날짜<input type="date" name="new_date"></label></div>
     <div class="row"><label class="f">테크니션<input name="tech"></label><label class="f" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" name="carry" style="width:auto"> 세차권 이월</label></div>
@@ -444,64 +509,52 @@ function viewStop(){
   <p class="sub">남긴 기록 ${list.length}건</p>
   <div class="list">${list.map(s=>{const n=D.stops.filter(x=>x.customer&&x.customer===s.customer).length;return `<div class="card">
     <div class="chead"><b>${fmtDate(s.wash_date)} · ${esc(s.customer||'고객 미입력')}</b><span class="tag">${esc(s.lot)} · ${esc(teamLabel(s.team))}</span></div>
-    <div class="meta">${esc(s.reason)} · 차 표면 ${s.car_temp??'-'}℃ · 기온 ${s.air_temp??'-'}℃<br>처리 ${esc(s.action)}${s.new_date?` → ${fmtDate(s.new_date)}`:''}${s.carry?' · 세차권 이월':''}${s.tech?` · ${esc(s.tech)}`:''}</div>
-    ${n>=2?`<div class="st need">이 고객 ${n}번째 중단 → 이 고객은 10·12·14시로만 잡아야 합니다. 이 화면은 자동으로 알리지 않으니 운영팀에 직접 알려 주세요</div>`:''}
+    <div class="meta">${esc(s.reason)} · 기온 ${s.air_temp??'-'}℃<br>처리 ${esc(s.action)}${s.new_date?` → ${fmtDate(s.new_date)}`:''}${s.carry?' · 세차권 이월':''}${s.tech?` · ${esc(s.tech)}`:''}</div>
+    ${n>=2?`<div class="st need">이 고객 ${n}번째 중단 → 확정 문서: 그 주소는 처음부터 낮 시간이나 대체 장소로 잡습니다. 희준님께 알려 주세요</div>`:''}
     ${s.memo?`<div class="meta">${esc(s.memo)}</div>`:''}
     <div class="row">${stopMoveBtn(s)}<button class="btn ghost sm" data-del="${s.id}">지우기</button></div></div>`;}).join('')}</div>`;
 }
 
 function viewGuide(){
-  return `<details class="guide" open><summary>원칙</summary><ul>
-  <li>지금부터 2/28까지 야외 주차 세차는 10·12·14시 시작으로만 진행(11월 남은 예약 포함)</li>
-  <li>"겨울엔 밖에서 세차 안 해요"로 끝내지 않기. 항상 다른 날짜 제안</li>
+  return `<details class="guide" open><summary>팀장 할 일 (언제 무엇을)</summary><ul>
+  <li><b>① 11/30(월)까지 · 첫 전화</b>: [첫 전화 남음] 칩. 야외 고객과 주차 유형 확인 고객 전원. 예약이 가까운 고객부터. 08·16·18시 예약은 카드 3에서 낮으로 옮김</li>
+  <li><b>② 매주 월·수 08:10 이후 · 예보</b>: #caramel_팀장에 팀장님 태그로 판정 글(가능·애매·불가) → [예보 불가] 칩 → 고객에게 "그대로 두고 당일 현장에서 해 보기"와 "다른 날 낮으로 옮기기" 중 고르게 함</li>
+  <li><b>③ 테크니션이 멈춘 날 · 다시 잡기</b>: #caramel_실시간 취소 알림 → 30분 안에 [결빙 취소 다시 잡기] 칩에 뜸 → 바로 고객 전화 → 1주 뒤 낮으로 새 예약. 테크니션 판단은 뒤집지 않음</li>
+  <li><b>④ 수시 · 새 고객·새 예약</b>: 새로 들어온 고객은 [첫 전화 남음], 통화한 고객의 새 08·16·18시 예약은 [부탁 전 예약]에 뜸</li>
+  <li><b>⑤ 부탁한 뒤 · 마무리 확인</b>: [차비스 확인 필요] 칩. 3시간째 그대로면 슬랙 카드 확인 후 다시 부탁. 부탁과 다르게 바뀌었으면 고객에게 알리고 [확인함]</li>
+  <li><b>⑥ 1주 뒤에도 못 하면</b>: 컨시어지 → 회사 부담 탁송(안테나샵) / SA급·고단가 상품 → 회사 부담 세차장(고객이 직접) / 그 밖 → 1주 더. 탁송·세차장은 희준님께 요청</li>
+  <li><b>⑦ 시즌 시작 전 · 지급 물품</b>: 방한장갑·발열 조끼·동계 조끼·점퍼를 팀원에게 배부</li></ul></details>
+  <details class="guide"><summary>고객 카드 쓰는 법</summary><ul>
+  <li>위 칩을 눌러 할 일별로 고객을 봄 → 고객 이름 줄을 누르면 그 고객 카드만 펼쳐짐</li>
+  <li><b>1 전화</b>: 이 고객 전화 대본(이름·시각·빈 시각이 채워져 있음) → [전화 걸기]</li>
+  <li><b>2 통화 결과</b>: 통화함·부재·거절·연락 안 됨 → ①주차 위치 → (컨시어지·SA급만) ③1주 뒤도 못 하면 → 메모</li>
+  <li><b>3 예약 정하기</b>: 고객이 고른 빈 시각 누르기 → 담당 바꿔도 되는지 → '고객이 이 날짜·시각에 동의함'</li>
+  <li><b>4 차비스에게 부탁</b>: [차비스에게 부탁하기] → #caramel_팀장 글 스레드의 차비스 카드에서 [실행]. 30분 안에 '완료'</li></ul></details>
+  <details class="guide"><summary>원칙과 하지 않는 말</summary><ul>
+  <li>지금부터 2/28까지 야외 주차 세차는 10·12·14시 시작으로만</li>
+  <li>"겨울엔 밖에서 세차 안 해요"로 끝내지 않기. 항상 다른 날짜·방법 제안</li>
   <li>날씨와 상관없이 다 된다고 약속하지 않기</li>
-  <li>안 받으면 1시간 뒤 한 번 더 → 그래도 안 되면 "전화드렸는데 연결이 안 돼서요, 편하실 때 연락 주세요" 문자</li></ul></details>
-  <details class="guide"><summary>첫 전화 (11/30까지)</summary><ul>
-  <li>"안녕하세요, 카라멜 ○○팀 팀장 ○○○입니다. 겨울 세차 일정 때문에 연락드렸어요."</li>
-  <li>이유: "겨울에는 차 표면에 물이 얼면 닦아낼 수 없고, 억지로 닦으면 스크래치가 생겨요. 그래서 지금부터 2월까지 야외 세차는 낮 10시, 12시, 2시에만 시작해요."</li>
-  <li>08·16·18시 예약: "○일 ○시 예약을 같은 날 낮 ○시로 옮겨 드리려고 하는데 괜찮으실까요?"</li>
-  <li>10·12·14시 예약: "지금 잡힌 시간은 그대로 진행해요."</li>
-  <li>공통: "영하로 내려가거나 눈이 오면 못 할 수 있어요. 그 주 월요일에 미리 연락드리고, 당일에도 다시 연락드릴게요."</li>
-  <li>질문: 주차 위치 / 그날 실내로 옮겨 두실 수 있는지 / 컨시어지 고객은 "1주 뒤에도 못 하면 저희가 차를 옮겨 실내에서 해 드려도 되는지(탁송, 회사 부담)", SA급·고단가 고객은 "1주 뒤에도 못 하면 저희가 잡아 둔 세차장에 직접 오실 수 있는지(회사 부담)"</li>
-  <li>마무리: "바뀐 일정은 카카오톡 「예약 확정 안내」로 받으실 거예요."</li>
-  <li>컨시어지 고객 마무리: 카카오톡 알림이 가지 않으니 "○일 ○시로 확정해 두겠습니다"로 통화에서 직접 확정</li>
-  <li>통화가 끝나면 화면에서 통화 결과 → 시각 → '고객이 이 날짜·시각에 동의함' 순서로 누름</li></ul></details>
-  <details class="guide"><summary>주차 정보 없는 고객 (첫 전화)</summary><ul>
-  <li><b>전화 전</b>: 카드의 단서를 봄. 네이버지도로 건물 확인(아파트·오피스텔 대단지는 지하 주차장이 많고, 단독·빌라·상가는 지상이 많음). 고객 주차 메모, 지난 해피콜 기록, 같은 건물 다른 고객 등록도 같이 봄</li>
-  <li><b>짐작이 있으면</b>: "안녕하세요, 카라멜 ○○팀 팀장 ○○○입니다. 겨울 세차 일정 때문에 연락드렸는데요, 기록을 보니 ○○ 지하 주차장에 세워 두시는 것 같은데 맞으실까요?"</li>
-  <li><b>짐작이 없으면</b>: "차는 보통 지하 주차장에 세우세요, 아니면 지상에 세우세요?"</li>
-  <li><b>지하·실내</b>면: "실내는 지금처럼 진행돼요. 혹시 주차 위치가 바뀌면 알려 주세요." → ①주차 위치 "지하"</li>
-  <li><b>지상·야외</b>면: 위 「첫 전화」 대본으로 이어서 안내 → ①주차 위치 "지상 야외"</li>
-  <li><b>그날그날 다르면</b>: "겨울에는 세차하는 날만이라도 지하에 세워 주실 수 있을까요?" → 된다고 하면 "지하", 어렵다고 하면 "지상 야외"로 고르고 메모에 "섞임"</li>
-  <li><b>기계식</b>이면: "실내 타워형인가요, 밖에 있는 기계식인가요?" → 실내면 "지하", 밖이면 "지상 야외"</li></ul></details>
+  <li>고객 연락은 담당 팀장 한 사람이</li>
+  <li>하지 않는 말: "밖에서 세차 안 해요" · "겨울엔 원래 못 해요" · 이유 없이 "추워서 안 돼요" · 가 보기 전에 "아마 못 할 거예요" · "날씨 상관없이 해 드릴게요"</li></ul></details>
+  <details class="guide"><summary>테크니션이 멈춘 뒤 전화</summary><ul>
+  <li>멈출지는 현장 테크니션이 정함. 팀장은 그 판단을 뒤집지 않음</li>
+  <li>고객은 "카라멜 사정으로 취소" 알림톡을 먼저 받은 상태. 이유는 #caramel_실시간 알림을 보고 말함</li>
+  <li>"오늘 ○시 세차는 차 표면에 물이 얼어서, 닦으면 흠집이 생길 수 있어 진행하지 못했어요. 죄송합니다. 세차권은 그대로 돌려드렸고요, 다음 주 ○일 낮 ○시 어떠세요?"</li>
+  <li>바닥이 이유면: "차는 괜찮은데, 세차 물이 바닥에 얼면 다른 분들이 미끄러질 수 있어서요"</li>
+  <li>그 뒤: 카드 3에서 1주 뒤 빈 시각 → 동의 → 4 부탁. 고객이 다른 날을 원하지 않으면 [다시 안 잡음]에 이유를 적음</li></ul></details>
   <details class="guide"><summary>자주 묻는 질문</summary><ul>
-  <li><b>어떤 고객이 나오나요?</b> 오늘부터 2/28까지 예약이 있고, 주차 위치가 야외로 등록됐거나 비어 있지만 테크니션 기록상 야외인 고객입니다. 주차 위치가 아예 비어 있는 고객(혹서기 때 만든 주소 제외)도 "주차 유형 확인 필요"로 나옵니다. 이 고객은 실내·야외만 물어 주시면 되고, 예보 판정과 옮기기 대상은 아닙니다. 예약이 없어지거나 세차가 끝나면 목록에서 빠집니다.</li>
-  <li><b>우리 팀이 아닌 테크니션 예약이 왜 있나요?</b> 고객은 예약이 가장 많은 팀 하나에만 들어갑니다. 한 번 통화로 그 고객의 예약을 모두 정리하려는 것입니다. 담당은 그대로가 기본입니다. 다른 팀 담당 예약에는 "(Z3 담당)"처럼 표시됩니다.</li>
-  <li><b>순서가 어떻게 되나요?</b> [옮길 수 있는 시각 보기]로 빈 칸 확인 → 전화 → 통화 결과 '통화함' → 고객이 고른 칸 누르기 → '고객이 이 날짜·시각에 동의함' → [차비스에게 부탁하기] → 슬랙 스레드의 차비스 카드에서 [실행]. 통화함과 동의가 없으면 부탁 버튼이 생기지 않습니다.</li>
-  <li><b>동의를 눌렀는데 풀렸어요.</b> 날짜나 시각을 바꾸면 동의가 지워집니다. 고객이 동의한 날짜·시각에만 동의가 붙어 있어야 해서입니다. 바꾼 시각으로 다시 동의를 받고 누릅니다.</li>
-  <li><b>차비스 카드는 어디 있고 누가 누르나요?</b> #caramel_팀장에 올라간 글의 스레드에 달립니다. 팀장님이 [실행]을 누르면 바로 옮겨지고, 고객에게 카카오톡 「예약 확정 안내」가 갑니다(컨시어지 고객 제외). 안 누르면 운영팀 승인 시간(12·15·18시)에 운영팀이 처리합니다.</li>
-  <li><b>후보는 어떻게 고른 건가요?</b> 그 예약 날짜 6일 전부터 13일 뒤까지(오늘 이후, 3/14까지) 10·12·14시 칸 중, 근무시간 안이고 휴무·차단이 없고 다른 예약과 안 겹치는 칸입니다. 가까운 날부터 보입니다. 위 칸은 같은 담당, 아래 칸은 같은 팀 다른 담당입니다.</li>
-  <li><b>담당을 바꿔도 되나요?</b> 고객이 괜찮다고 하면 됩니다. 아래 칸(같은 팀 다른 담당)을 고르면 차비스 글에 "담당 ○○로 변경"이 들어갑니다. 직접 날짜·시각을 고를 때는 '담당 그대로 · 바꿔도 되면 누르기'를 누르면 "같은 팀 다른 담당으로 바꿔도 됨"으로 부탁합니다. 아무것도 안 누르면 담당 그대로만 부탁합니다.</li>
-  <li><b>날씨 때문에 10·12·14시 예약을 옮기려면요?</b> '시간은 괜찮은 예약' 줄의 [추워서 못 하면 옮기기]를 누르면 옮기기 칸이 열리고 후보가 나옵니다. 예보가 '불가'인 예약은 칸이 처음부터 열려 있습니다. 순서는 08·16·18시 예약과 같습니다.</li>
-  <li><b>후보에 있던 칸인데 차비스가 겹친다고 해요.</b> 그 사이 다른 예약이 들어온 것입니다. 카드에 [안 함]을 누르고 [후보 새로 보기]로 다시 고릅니다.</li>
-  <li><b>고객이 좋다고 한 시각에 담당이 이미 다른 예약이 있으면요?</b> 후보에서 고르면 대부분 피할 수 있습니다. 직접 고른 시각이면 차비스 카드에 [겹쳐도 실행]처럼 '그래도 실행' 버튼만 붙습니다. 누르지 말고 [안 함]을 누른 뒤, 고객에게 다시 전화해 다른 시각을 잡고 화면에서 시각과 동의를 다시 누릅니다.</li>
-  <li><b>'옮김 완료'는 언제 바뀌나요?</b> 차비스가 옮긴 뒤 다음 예약 정보 갱신 때 바뀝니다(06–22시 30분마다, 최대 30분). 그 전까지는 '차비스에 부탁함'으로 보입니다.</li>
-  <li><b>'부탁 후 N시간째 그대로'는요?</b> 부탁하고 3시간이 지나도 예약이 안 바뀐 경우입니다. 슬랙 글에서 카드가 어떻게 됐는지 봅니다. 카드가 막혀 있으면 [안 함]을 누르고 [차비스에게 다시 부탁하기]를 누릅니다. 같은 부탁은 1시간 안에 다시 올라가지 않습니다.</li>
-  <li><b>고객이 다른 날도 원하지 않으면요?</b> 취소는 팀장 앱에서 합니다. 취소 사유는 「카라멜 과실 취소」, 상세에 "[결빙]"이라고 적습니다(결빙 사유가 생기기 전 임시 방법). 이 화면에는 중단 기록을 남기고 처리를 "취소(팀장 앱)"으로 고릅니다. 시즌 뒤 취소 건수를 셀 때 씁니다. 먼저 다른 날을 한 번은 권해 주세요.</li>
-  <li><b>잘못 부탁했어요.</b> 아직 실행 전이면 카드에 [안 함]을 누릅니다. 이미 옮겨졌으면 그 글 스레드에 "@차비스 예약 ○○번 ○/○ ○시로 다시 옮겨줘"처럼 예약 번호와 시각을 함께 적어 부탁하고, 고객에게 전화로 알립니다.</li>
-  <li><b>위 숫자는 뭔가요?</b> '통화함 3/12명'은 목록 고객 중 통화 결과를 '통화함'으로 남긴 수, '옮김 완료 2/9건'은 옮겨야 하는 예약 중 실제로 10·12·14시로 바뀐 수입니다.</li>
-  <li><b>다른 휴대폰에서 바꾼 게 안 보여요.</b> 다른 앱에 갔다가 돌아오면 새로 불러옵니다. 그래도 그대로면 화면을 새로고침합니다.</li></ul></details>
-  <details class="guide"><summary>월요일 전화</summary><ul>
-  <li>월요일·수요일 아침 8시 10분에 #caramel_팀장에 팀장님 태그로 이번 주 예약별 판정 글(가능·애매·불가)이 올라옵니다. 그 글을 보고 아래처럼 전화합니다. 4일 뒤부터는 덜 정확한 예보(중기예보)라 수요일에 한 번 더 확인해서 올립니다.</li>
-  <li>가능: "이번 주 그날은 기온이 괜찮아서 예정대로 진행할게요. 당일에 갑자기 추워지면 아침에 다시 연락드릴게요."</li>
-  <li>애매: "그날 영하 근처라 어려울 수도 있어요. 예약은 그대로 두고 당일 아침에 다시 연락드릴게요."</li>
-  <li>불가: 전화 전에 화면에서 그 예약의 [옮길 수 있는 시각 보기]로 빈 칸을 두세 개 골라 둡니다. "그날은 영하나 눈 예보가 있어서 다른 날 낮으로 옮겨 드리려고 하는데, ○일 ○시나 ○일 ○시 어떠세요?" → 정해지면 그 칸을 누르고 '고객이 이 날짜·시각에 동의함' → [차비스에게 부탁하기]</li></ul></details>
-  <details class="guide"><summary>당일 전화 (못 할 때만)</summary><ul>
-  <li>야외: "오늘 기온이 너무 낮아서 차 표면에 물이 얼어요. 언 물기를 닦으면 스크래치가 생길 수 있어서 오늘은 진행하지 않고, 다른 날 낮 시간으로 다시 잡아 드릴게요. ○일 ○시나 ○일 ○시 어떠세요?" (화면의 후보에서 골라 말하기)</li>
-  <li>실내: "실내 주차장이지만 오늘은 기온이 낮아서 차 표면에 물이 바로 얼어요. 고객님 차를 위해 오늘은 진행하지 않으려고 해요. 오늘 낮 ○시로 옮기거나 다른 날로 다시 잡아 드릴게요."</li>
-  <li>고객이 다른 날도 원하지 않으면: 팀장 앱에서 「카라멜 과실 취소」 + 상세 "[결빙]" → 이 화면 중단 기록의 처리 "취소(팀장 앱)"</li>
-  <li>테크니션이 앱에서 취소하면 #caramel_실시간 알림 → 바로 고객 전화 → 고객 카드 '다시 잡을 예약'에서 후보(1주 뒤 낮 먼저) → 동의 → [차비스에게 부탁하기] → 새 예약</li>
-  <li>1주 뒤에도 못 하면(위에서부터 먼저 해당하는 줄 하나): ① 컨시어지 → 회사 부담 탁송으로 안테나샵에서 세차(예약까지 잡아 드림) ② SA급 차량·고단가 상품 고객 → 회사 부담으로 세차장을 예약해 두고 고객이 직접 와서 기다림 ③ 그 밖 → 1주 더 미룸. ①②는 희준님께 요청</li></ul></details>`;
+  <li><b>어떤 고객이 나오나요?</b> 오늘부터 2/28까지 예약이 있고, 주차 위치가 야외로 등록됐거나 비어 있는 고객입니다(법인 제외). 비어 있는 고객은 실내·야외만 확인하면 되고, 통화에서 "지상 야외"를 고르면 그 자리에서 옮길 수 있습니다.</li>
+  <li><b>우리 팀이 아닌 테크니션 예약이 왜 있나요?</b> 고객은 예약이 가장 많은 팀 하나에 들어갑니다. 한 번 통화로 그 고객 예약을 모두 정리하려는 것입니다. 다른 팀 담당 예약에는 "(Z3 담당)"처럼 붙습니다.</li>
+  <li><b>빈 시각은 어떻게 고른 건가요?</b> 그 예약 날짜 6일 전부터 13일 뒤까지 10·12·14시 중, 근무시간 안이고 휴무·차단이 없고 다른 예약과 안 겹치는 칸입니다. 카드를 펼칠 때 회사 DB에서 바로 셉니다. 차비스가 실행 직전에 다시 확인합니다.</li>
+  <li><b>담당을 바꿔도 되나요?</b> 고객이 괜찮다고 하면 됩니다. "담당을 바꿔도 된다고 하면" 아래 칸을 고르거나, "네(같은 팀 누구든)"를 누릅니다.</li>
+  <li><b>동의를 눌렀는데 풀렸어요.</b> 날짜나 시각을 바꾸면 동의가 지워집니다. 바뀐 시각으로 다시 동의를 받고 누릅니다.</li>
+  <li><b>차비스 카드는 누가 누르나요?</b> 팀장님이 [실행]을 누르면 바로 옮겨지고, 고객에게 카카오톡 「예약 확정 안내」가 갑니다(컨시어지 제외). 안 누르면 운영팀이 12·15·18시에 처리합니다. '그래도 실행' 버튼만 있으면 누르지 않고 [안 함] 후 고객에게 다시 전화합니다.</li>
+  <li><b>'완료'는 언제 바뀌나요?</b> 차비스가 옮긴 뒤 다음 갱신 때 바뀝니다(06–22시 30분마다). 그 전까지는 '차비스 처리 중'입니다.</li>
+  <li><b>잘못 부탁했어요.</b> 실행 전이면 카드에 [안 함]. 이미 옮겨졌으면 그 글 스레드에 "@차비스 예약 ○○번 ○/○ ○시로 다시 옮겨줘"처럼 예약 번호와 시각을 적고, 고객에게 전화로 알립니다.</li>
+  <li><b>결빙과 상관없는 취소가 '다시 잡기'에 떠요.</b> 회사 사정 취소는 결빙·우천을 DB에서 구분할 수 없어 함께 뜹니다. 다시 잡을 필요가 없으면 [다시 안 잡음]에 이유를 적습니다.</li>
+  <li><b>고객이 다른 날도 원하지 않으면요?</b> 다시 잡을 예약이면 [다시 안 잡음]에 "고객이 원하지 않음". 남은 예약을 취소해야 하면 팀장 앱에서 「카라멜 과실 취소」 + 상세 "[결빙]"으로 하고, 그 예약이 다시 잡기 목록에 뜨면 [다시 안 잡음]을 누릅니다.</li>
+  <li><b>위 숫자는 뭔가요?</b> '통화함 3/12명'은 통화 결과를 '통화함'으로 남긴 고객 수, '옮김 완료 2/9건'은 08·16·18시 예약 중 낮으로 옮겨진 수입니다.</li>
+  <li><b>다른 휴대폰에서 바꾼 게 안 보여요.</b> 다른 앱에 갔다 오면 새로 불러옵니다. 그래도 그대로면 새로고침합니다.</li></ul></details>`;
 }
 
 // ── 저장 ──
@@ -527,7 +580,8 @@ function bind(){
     grp.forEach(x=>x.setAttribute('aria-pressed',x===b));card.classList.toggle('done',res==='통화함');
     if(await saveCall(uid,{result:res,called_at:new Date().toISOString()}))render();
     else{grp.forEach((x,i)=>x.setAttribute('aria-pressed',before[i]));card.classList.toggle('done',wasDone);}});
-  v.querySelectorAll('select[data-uid],textarea[data-uid]').forEach(el=>el.onchange=()=>saveCall(+el.dataset.uid,{[el.dataset.k]:el.value}));
+  v.querySelectorAll('select[data-uid],textarea[data-uid]').forEach(el=>el.onchange=async()=>{const ok=await saveCall(+el.dataset.uid,{[el.dataset.k]:el.value});
+    if(ok&&el.dataset.k==='parking'){render();for(const r of pendingOf(+el.dataset.uid))if(!CAND.get(+r.rid)&&!asked(r))await loadCand(+r.rid);}});
   v.querySelectorAll('input[data-rid]').forEach(el=>el.onchange=()=>saveMove(+el.dataset.rid,{[el.dataset.k]:el.value}));
   // 시각을 고르는 것과 고객 동의는 따로 누른다(날짜·시각을 바꾸면 서버가 동의를 지운다)
   v.querySelectorAll('button[data-hour]').forEach(b=>b.onclick=()=>{const rid=+b.dataset.rid;const box=b.closest('.mv');
@@ -537,6 +591,12 @@ function bind(){
     saveMove(rid,{consent:b.getAttribute('aria-pressed')!=='true'});});
   // 날씨로 옮기기: 10·12·14시 예약에 옮기기 칸을 펼치고 후보를 바로 부른다
   v.querySelectorAll('button[data-open]').forEach(b=>b.onclick=()=>{const rid=+b.dataset.open;OPEN.add(rid);render();loadCand(rid);});
+  // 고객 줄을 누르면 그 고객 하나만 펼치고, 남은 예약의 빈 시각을 바로 불러온다
+  v.querySelectorAll('button[data-exp]').forEach(b=>b.onclick=async()=>{const uid=+b.dataset.exp;EXP=EXP===uid?0:uid;render();
+    if(!EXP)return;const el=$('c'+uid);if(el)el.scrollIntoView({block:'start'});
+    for(const r of pendingOf(uid))if(!CAND.get(+r.rid)&&!asked(r))await loadCand(+r.rid);});
+  v.querySelectorAll('button[data-ack]').forEach(b=>b.onclick=()=>saveMove(+b.dataset.ack,{skip:'확인함'}));
+  v.querySelectorAll('button[data-flexv]').forEach(b=>b.onclick=()=>saveMove(+b.dataset.rid2,{tech_flex:b.dataset.flexv==='1'}));
   v.querySelectorAll('button[data-skip]').forEach(b=>b.onclick=()=>{const why=prompt('다시 안 잡는 이유를 짧게 적어 주세요 (예: 고객이 원하지 않음)');if(why&&why.trim())saveMove(+b.dataset.skip,{skip:why.trim()});});
   v.querySelectorAll('button[data-unskip]').forEach(b=>b.onclick=()=>saveMove(+b.dataset.unskip,{skip:null}));
   v.querySelectorAll('button[data-close]').forEach(b=>b.onclick=()=>{OPEN.delete(+b.dataset.close);render();});
@@ -564,7 +624,7 @@ function bind(){
   });
   const f=$('stopf');
   if(f)f.onsubmit=async e=>{e.preventDefault();const fd=new FormData(f);const o=Object.fromEntries(fd.entries());
-    o.carry=fd.get('carry')==='on';o.rid=o.rid?+o.rid:null;o.car_temp=o.car_temp===''?null:+o.car_temp;o.air_temp=o.air_temp===''?null:+o.air_temp;if(!o.new_date)delete o.new_date;
+    o.carry=fd.get('carry')==='on';o.rid=o.rid?+o.rid:null;o.car_temp=null;o.air_temp=o.air_temp===''?null:+o.air_temp;if(!o.new_date)delete o.new_date;
     try{const j=await api('addStop',{fields:o});D.stops.unshift(j.row);toast('기록했습니다');render();}catch(err){toast('저장 안 됨: '+err.message);}};
   v.querySelectorAll('button[data-del]').forEach(b=>b.onclick=async()=>{
     if(b.dataset.armed!=='1'){b.dataset.armed='1';b.textContent='한 번 더 누르면 지웁니다';return;}
